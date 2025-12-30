@@ -330,7 +330,7 @@ def submit_napsa_member_single_return():
 
     payload = {
         "returnReference": generate_numeric_id(),
-        "employerAccountNumber": NAPSA_CLIENT_INSTANCE.get_employee_account(),
+        "employerAccountNumber": NAPSA_CLIENT_INSTANCE.get_employeer_account(),
         **payload_fields
     }
 
@@ -595,7 +595,7 @@ def submit_napsa_member_topup():
     url = urljoin(NAPSA_BASE_URL, f"icare-thirdparty-returns/employerReturnTopUpReturn")
     payload = {
         "returnReference": generate_numeric_id(),
-        "employerAccountNumber": NAPSA_CLIENT_INSTANCE.get_employee_account(),
+        "employerAccountNumber": NAPSA_CLIENT_INSTANCE.get_employeer_account(),
         "year": year,
         "month": month,
         "ssn": ssn,
@@ -674,7 +674,7 @@ def submit_napsa_member_bulk_return():
         "Content-Type": "application/json"
     }
 
-    employer_account = NAPSA_CLIENT_INSTANCE.get_employee_account()
+    employer_account = NAPSA_CLIENT_INSTANCE.get_employeer_account()
 
 
     for item in returns_list:
@@ -778,3 +778,119 @@ def napsa_callback():
             "status": "error",
             "message": str(e)
         }
+
+
+
+@frappe.whitelist()
+def get_napsa_member_full_details(use_mock=False):
+
+    nrc = frappe.form_dict.get("nrc")
+    ssn = frappe.form_dict.get("ssn")
+
+    if not nrc and not ssn:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Either NRC or SSN is required",
+            status_code=400,
+            http_status=400
+        )
+
+    if use_mock:
+        member_data = {
+            "ssn": "SSN123456",
+            "firstName": "John",
+            "lastName": "Doe",
+            "nrc": nrc or "123456/78/9",
+            "gender": "M"
+        }
+        ceiling_data = {
+            "year": "2025",
+            "amount": "1708.20"
+        }
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="success",
+            message="Member and ceiling retrieved successfully (mock)",
+            data={"member": member_data, "ceiling": ceiling_data},
+            status_code=200,
+            http_status=200
+        )
+
+    try:
+
+        token = NAPSA_CLIENT_INSTANCE.get_saved_token()
+        if not token:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Authentication token not found",
+                status_code=401,
+                http_status=401
+            )
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        if nrc:
+            member_url = urljoin(
+                NAPSA_BASE_URL,
+                f"icare-thirdparty-returns/memberKycNrc?nrc={nrc}"
+            )
+        else:
+            member_url = urljoin(
+                NAPSA_BASE_URL,
+                f"icare-thirdparty-returns/memberKyc/{ssn}"
+            )
+
+        member_res = requests.get(member_url, headers=headers, timeout=50)
+        print("NAPSA Member Full Details Response:", member_res.json())
+        member_data = member_res.json().get("data")
+        
+        member_status_code = int(member_res.json().get("statusCode", member_res.status_code))
+
+        if member_status_code != 200 or not member_data:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=member_res.json().get("message", "Error fetching member details"),
+                status_code=member_status_code,
+                http_status=member_status_code
+            )
+        member_data["dob"] = "23/03/1970"
+
+        ceiling_url = urljoin(NAPSA_BASE_URL, "icare-thirdparty-returns/ceilingValue")
+        ceiling_res = requests.get(ceiling_url, headers=headers, timeout=50)
+        ceiling_data = ceiling_res.json().get("data")
+        ceiling_status_code = int(ceiling_res.json().get("statusCode", ceiling_res.status_code))
+
+        if ceiling_status_code != 200 or not ceiling_data:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=ceiling_res.json().get("message", "Error fetching ceiling value"),
+                status_code=ceiling_status_code,
+                http_status=ceiling_status_code
+            )
+
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="success",
+            message="Member details and ceiling retrieved successfully",
+            data={"member": member_data, "ceiling": ceiling_data},
+            status_code=200,
+            http_status=200
+        )
+
+    except requests.exceptions.RequestException as e:
+        frappe.log_error(frappe.get_traceback(), "NAPSA Combined API Request Error")
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Failed to communicate with NAPSA service",
+            status_code=500,
+            http_status=500
+        )
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "NAPSA Combined API Error")
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="An unexpected error occurred",
+            status_code=500,
+            http_status=500
+        )

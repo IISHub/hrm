@@ -1,6 +1,6 @@
 import frappe
 
-EMPLOYER_ACCOUNT_NUMBER = "5205098"
+EMPLOYER_ACCOUNT_NUMBER = "5205743"
 class NapsaClient():
     def __init__(self):
         self.EMPLOYER_ACCOUNT_NUMBER = EMPLOYER_ACCOUNT_NUMBER
@@ -38,6 +38,6 @@ class NapsaClient():
             )
         return token
     
-    def get_employee_account(self):
+    def get_employeer_account(self):
         return self.EMPLOYER_ACCOUNT_NUMBER
     

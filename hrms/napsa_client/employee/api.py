@@ -11,6 +11,23 @@ NAPSA_CLIENT_INSTANCE = NapsaClient()
 import frappe
 from frappe import _
 
+def generate_employee_id():
+    last_id = frappe.db.sql("""
+        SELECT custom_id
+        FROM `tabEmployee`
+        WHERE custom_id IS NOT NULL
+        ORDER BY CAST(custom_id AS UNSIGNED) DESC
+        LIMIT 1
+    """, as_dict=True)
+
+    if last_id and str(last_id[0]["custom_id"]).isdigit():
+        last_num = int(last_id[0]["custom_id"])
+    else:
+        last_num = 0
+
+    return last_num + 1
+
+
 @frappe.whitelist()
 def create_employee():
     data = frappe.form_dict
@@ -22,14 +39,17 @@ def create_employee():
     Dob = data.get("Dob")
     Gender = data.get("Gender")
     Email = data.get("Email")
+    CompanyEmail = data.get("CompanyEmail")
     MaritalStatus = data.get("MaritalStatus")
     PhoneNumber = data.get("PhoneNumber")
+    AlternatePhone = data.get("AlternatePhone")
     JobTitle = data.get("JobTitle")
     EmployeeType = data.get("EmployeeType")
     AccountType = data.get("AccountType")
     BankName = data.get("BankName")
     AccountName = data.get("AccountName")
     AccountNumber = data.get("AccountNumber")
+    BranchCode = data.get("BranchCode")
     PaymentMethod = data.get("PaymentMethod")
     SocialSecurityNapsa = data.get("SocialSecurityNapsa")
     NhimaHealthInsurance = data.get("NhimaHealthInsurance")
@@ -64,8 +84,11 @@ def create_employee():
     PaymentFrequency = data.get("PaymentFrequency")
     BasicSalary = data.get("BasicSalary")
     HousingAllowance = data.get("HousingAllowance")
+    MealAllowance = data.get("MealAllowance")
     TransportAllowance = data.get("TransportAllowance")
     otherAllowances = data.get("otherAllowances")
+    GrossSalary = data.get("GrossSalary")
+    
     
     shift_name = shift 
     shift_id = None
@@ -129,8 +152,10 @@ def create_employee():
     CV_EDUCERT_URL = save_file(EDUCERT_DOC, site_name="erpnext.localhost", folder_type="EDUCERT_DOC")
     POLICE_REPORT_DOC_URL = save_file(POLICE_REPORT_DOC, site_name="erpnext.localhost", folder_type="POLICE_REPORT_DOC")
 
+    employee_id = generate_employee_id()
     employee = frappe.get_doc({
         "doctype": "Employee",
+        "custom_id": employee_id,
         "first_name": FirstName,
         "last_name": LastName,
         "middle_name": OtherNames,
@@ -138,7 +163,9 @@ def create_employee():
         "date_of_birth": Dob,
         "date_of_joining": EngagementDate,
         "personal_email": Email,
+        "company_email": CompanyEmail,
         "cell_number": PhoneNumber,
+        "custom_alternate_phone": AlternatePhone,
         "marital_status": MaritalStatus,
         "department": department_id,
         "custom_jobtitle": JobTitle,
@@ -150,10 +177,11 @@ def create_employee():
         "custom_ceiling_year": CeilingYear,
         "custom_ceiling_amount": CeilingAmount,
         "custom_payment_method": PaymentMethod,
-        "custom_accounttype": AccountType,
-        "custom_bankname": BankName,
+        "custom_bank_account_type": AccountType,
+        "bank_name": BankName,
         "custom_accountname": AccountName,
-        "custom_accountnumber": AccountNumber,
+        "bank_ac_no": AccountNumber,
+        "custom_bank_branch_code": BranchCode,
         "custom_verifiedfromsource": verifiedFromSource,
         "custom_address_street": addressStreet,
         "custom_address_city": addressCity,
@@ -182,6 +210,8 @@ def create_employee():
         "custom_housing_allowance": HousingAllowance,
         "custom_transport_allowance": TransportAllowance,
         "custom_otherallowances": otherAllowances,
+        "custom_meal_allowance": MealAllowance,
+        "custom_gross_salary": GrossSalary,
         "custom_nrc": NRC_DOCUMENT_URL,
         "custom_cv": CV_DOCUMENT_URL,
         "custom_educationcertificates": CV_EDUCERT_URL,
@@ -216,12 +246,27 @@ def get_employee():
             status_code=400,
             http_status=400
         )
-    employee = frappe.get_doc("Employee", employee_id)
+    employee_name = frappe.db.get_value(
+        "Employee",
+        {"custom_id": employee_id},
+        "name"
+    )
+
+    if not employee_name:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="error",
+            message="Employee not found",
+            status_code=404,
+            http_status=404
+        )
+
+    employee = frappe.get_doc("Employee", employee_name)
+
     department_name = employee.department if employee.department else None
     shift_name = employee.default_shift if employee.default_shift else None
 
     response_data = {
-        "id": str(employee.name),
+        "id": str(employee.custom_id),
         "status": employee.status,
         "identityInfo": {
             "nrc": employee.custom_national_registration_number,
@@ -241,7 +286,7 @@ def get_employee():
             "email": employee.personal_email,
             "workEmail": getattr(employee, "company_email", None),
             "phone": employee.cell_number,
-            "alternatePhone": getattr(employee, "alternate_phone", None),
+            "alternatePhone": employee.custom_alternate_phone,
             "address": {
                 "street": employee.custom_address_street,
                 "city": employee.custom_address_city,
@@ -278,7 +323,7 @@ def get_employee():
             }
         },
         "payrollInfo": {
-            "grossSalary": getattr(employee, "gross_salary", None),
+            "grossSalary": employee.custom_gross_salary,
             "currency": employee.salary_currency,
             "paymentFrequency": getattr(employee, "custom_payment_frequency", None),
             "paymentMethod": employee.custom_payment_method,
@@ -286,7 +331,7 @@ def get_employee():
                 "basicSalary": employee.custom_basic_salary,
                 "housingAllowance": employee.custom_housing_allowance,
                 "transportAllowance": employee.custom_transport_allowance,
-                "mealAllowance": getattr(employee, "custom_meal_allowance", 0),
+                "mealAllowance": employee.custom_meal_allowance,
                 "otherAllowances": employee.custom_otherallowances
             },
             "statutoryDeductions": {
@@ -296,10 +341,10 @@ def get_employee():
                 "payeAmount": getattr(employee, "custom_paye_amount", 0)
             },
             "bankAccount": {
-                "accountNumber": employee.custom_accountnumber,
-                "bankName": employee.custom_bankname,
-                "branchCode": getattr(employee, "custom_branch_code", None),
-                "accountType": employee.custom_accounttype
+                "accountNumber": employee.bank_ac_no,
+                "bankName": employee.bank_name,
+                "branchCode": employee.custom_bank_branch_code,
+                "accountType": employee.custom_bank_account_type
             }
         },
         "documents": {
@@ -337,11 +382,10 @@ def update_employee():
         http_status=200
     )
 
-
 @frappe.whitelist()
 def delete_employee():
     data = frappe.form_dict
-    employee_id = data.get("id")
+    employee_id = data.get("id") 
 
     if not employee_id:
         return NAPSA_CLIENT_INSTANCE.send_response(
@@ -351,7 +395,13 @@ def delete_employee():
             http_status=400
         )
 
-    if not frappe.db.exists("Employee", employee_id):
+    employee_name = frappe.db.get_value(
+        "Employee",
+        {"custom_id": employee_id},
+        "name"
+    )
+
+    if not employee_name:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
             message=f"Employee {employee_id} not found",
@@ -360,11 +410,10 @@ def delete_employee():
         )
 
     try:
-
         frappe.delete_doc(
             doctype="Employee",
-            name=employee_id,
-            force=1   
+            name=employee_name,
+            force=1
         )
 
         frappe.db.commit()

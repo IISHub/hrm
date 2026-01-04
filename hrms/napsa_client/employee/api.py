@@ -27,6 +27,41 @@ def generate_employee_id():
 
     return last_num + 1
 
+FIELD_MAP = {
+    "Email": "personal_email",
+    "CompanyEmail": "company_email",
+    "PhoneNumber": "cell_number",
+    "AlternatePhone": "custom_alternate_phone",
+    "TpinId": "custom_tax_payer_indentification_number",
+    "NrcId": "custom_national_registration_number",
+    "NhimaHealthInsurance": "custom_nhima_health_insurance_number",
+    "SocialSecurityNapsa": "custom_social_security_number",
+    "AccountNumber": "bank_ac_no",
+}
+
+def validate_unique_employee_fields(data, employee_name=None):
+    for api_field, employee_field in FIELD_MAP.items():
+        value = data.get(api_field)
+
+        if not value:
+            continue
+
+        filters = {employee_field: value}
+
+        if employee_name:
+            filters["name"] = ["!=", employee_name]
+
+        if frappe.db.exists("Employee", filters):
+            
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="sucesss", 
+                message=f"{api_field} '{value}' already exists", 
+                data=[], 
+                status_code=400, 
+                http_status=400
+            )
+
+
 
 @frappe.whitelist()
 def create_employee():
@@ -89,7 +124,118 @@ def create_employee():
     otherAllowances = data.get("otherAllowances")
     GrossSalary = data.get("GrossSalary")
     
+    if not FirstName:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="First name is required", status_code=400, http_status=400)
+    if not LastName:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Last name is required", status_code=400, http_status=400)
+    if not EngagementDate:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Engagement date is required", status_code=400, http_status=400)
+    if not Dob:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Date of birth is required", status_code=400, http_status=400)
+    if not Gender:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Gender is required", status_code=400, http_status=400)
+    if not NrcId:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="NRC is required", status_code=400, http_status=400)
+    if not TpinId:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="TPIN is required", status_code=400, http_status=400)
+    if not SocialSecurityNapsa:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Social Security NAPSA is required", status_code=400, http_status=400)
+    if not NhimaHealthInsurance:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="NHIMA number is required", status_code=400, http_status=400)
+    if not PhoneNumber:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Phone number is required", status_code=400, http_status=400)
+    if not Email:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Email is required", status_code=400, http_status=400)
+    if not department_label:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Department is required", status_code=400, http_status=400)
+    if not JobTitle:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Job title is required", status_code=400, http_status=400)
+
     
+    existing_employee = frappe.db.get_value("Employee", {"personal_email": Email}, "name")
+    if existing_employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Personal Email {Email} already exists.",
+            status_code=400,
+            http_status=400
+        )
+        
+    existing_employee = frappe.db.get_value("Employee", {"company_email": CompanyEmail}, "name")
+    if existing_employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Company Email {CompanyEmail} already exists.",
+            status_code=400,
+            http_status=400
+        )
+
+    existing_employee = frappe.db.get_value("Employee", {"cell_number": PhoneNumber}, "name")
+    if existing_employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Phone Number {PhoneNumber} already exists.",
+            status_code=400,
+            http_status=400
+        )
+        
+    existing_employee = frappe.db.get_value("Employee", {"custom_alternate_phone": AlternatePhone}, "name")
+    if existing_employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Alternate Phone {AlternatePhone} already exists.",
+            status_code=400,
+            http_status=400
+        )
+        
+    existing_employee = frappe.db.get_value("Employee", {"custom_tax_payer_indentification_number": TpinId}, "name")
+    if existing_employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"TPIN {TpinId} already exists.",
+            status_code=400,
+            http_status=400
+        )
+        
+        
+    existing_employee = frappe.db.get_value("Employee", {"custom_national_registration_number": NrcId}, "name")
+    if existing_employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"NRC {NrcId} already exists.",
+            status_code=400,
+            http_status=400
+        )
+        
+    existing_employee = frappe.db.get_value("Employee", {"custom_nhima_health_insurance_number": NhimaHealthInsurance}, "name")
+    if existing_employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"NHIMA number {NhimaHealthInsurance} already exists.",
+            status_code=400,
+            http_status=400
+        )
+    
+    existing_employee = frappe.db.get_value("Employee", {"custom_social_security_number": SocialSecurityNapsa}, "name")
+    if existing_employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"NAPSA number {SocialSecurityNapsa} already exists.",
+            status_code=400,
+            http_status=400
+        )
+        
+    
+    existing_employee = frappe.db.get_value("Employee", {"bank_ac_no": AccountNumber}, "name")
+    if existing_employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Bank Account {AccountNumber} already exists.",
+            status_code=400,
+            http_status=400
+        )
+
+
     shift_name = shift 
     shift_id = None
 
@@ -223,17 +369,118 @@ def create_employee():
 
     return NAPSA_CLIENT_INSTANCE.send_response(status="sucesss", message="Employee added successfully", data=[], status_code=201, http_status=201)
 
-@frappe.whitelist()
-def get_all_employees():
+
+@frappe.whitelist(allow_guest=True)
+def get_all_employees(page=None, page_size=None):
+    try:
+        page = int(page) if page else 1
+        page_size = int(page_size) if page_size else 10
+    except ValueError:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="page and page_size must be integers",
+            status_code=400,
+            http_status=400
+        )
+
+    # Ensure sensible pagination values
+    if page < 1:
+        page = 1
+    if page_size < 1:
+        page_size = 10
+    if page_size > 100:
+        page_size = 100
+
+    offset = (page - 1) * page_size
+    total_employees = frappe.db.count("Employee")
+
+    employees = frappe.get_all(
+        "Employee",
+        fields=[
+            "custom_id as id",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "custom_jobtitle as jobTitle",
+            "department",
+            "custom_work_location as location",
+            "status"
+        ],
+        limit_start=offset,
+        limit_page_length=page_size,
+        order_by="creation desc"
+    )
+
     data = []
+    for emp in employees:
+        full_name = " ".join(filter(None, [
+            emp.get("first_name"),
+            emp.get("middle_name"),
+            emp.get("last_name")
+        ]))
+
+        # Fetch human-readable department name
+        department_label = frappe.db.get_value(
+            "Department",
+            emp.get("department"),
+            "department_name"
+        ) or ""
+
+        data.append({
+            "id": emp.get("id"),
+            "name": full_name,
+            "jobTitle": emp.get("jobTitle"),
+            "department": department_label, 
+            "location": emp.get("location"),
+            "status": emp.get("status")
+        })
+
+    summary = {
+        "totalEmployees": total_employees,
+        "active": frappe.db.count("Employee", {"status": "Active"}),
+        "onLeave": frappe.db.count("Employee", {"status": "On Leave"}),
+        "inactive": frappe.db.count("Employee", {"status": "Inactive"})
+    }
+
+
+    locations = frappe.db.sql("""
+        SELECT DISTINCT custom_work_location
+        FROM tabEmployee
+        WHERE custom_work_location IS NOT NULL
+    """, pluck=True)
+
+    statuses = frappe.db.sql("""
+        SELECT DISTINCT status
+        FROM tabEmployee
+        WHERE status IS NOT NULL
+    """, pluck=True)
+
+    returned = len(data)
+    remaining = max(total_employees - (offset + returned), 0)
+
+    pagination = {
+        "page": page,
+        "page_size": page_size,
+        "returned": returned,
+        "remaining": remaining,
+        "total": total_employees
+    }
+
     return NAPSA_CLIENT_INSTANCE.send_response(
-        
         status="success",
-        message="API fetch all employees reserved",
-        data=data,
+        message="Employees fetched successfully",
+        data={
+            "summary": summary,
+            "pagination": pagination,
+            "locations": locations,
+            "statuses": statuses,
+            "employees": data
+        },
         status_code=200,
         http_status=200
     )
+
+
 @frappe.whitelist()
 def get_employee():
     data = frappe.form_dict
@@ -254,7 +501,7 @@ def get_employee():
 
     if not employee_name:
         return NAPSA_CLIENT_INSTANCE.send_response(
-            status="error",
+            status="fail",
             message="Employee not found",
             status_code=404,
             http_status=404

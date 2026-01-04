@@ -13,6 +13,7 @@ import re
 NAPSA_CLIENT_INSTANCE = NapsaClient()
 
 
+
 def generate_numeric_id(length=12):
     first_digit = random.randint(1, 9)
     remaining_digits = ''.join(str(random.randint(0, 9)) for _ in range(length - 1))
@@ -782,7 +783,7 @@ def napsa_callback():
 
 
 @frappe.whitelist()
-def get_napsa_member_full_details(use_mock=False):
+def get_napsa_member_full_details(use_mock=True):
 
     nrc = frappe.form_dict.get("nrc")
     ssn = frappe.form_dict.get("ssn")
@@ -796,24 +797,45 @@ def get_napsa_member_full_details(use_mock=False):
         )
 
     if use_mock:
-        member_data = {
-            "ssn": "SSN123456",
-            "firstName": "John",
-            "lastName": "Doe",
-            "nrc": nrc or "123456/78/9",
-            "gender": "M"
-        }
-        ceiling_data = {
-            "year": "2025",
-            "amount": "1708.20"
-        }
+        try:
+            response = requests.get(
+                f"http://0.0.0.0:9950/api/v1/kyc/?nrc={nrc}",
+                timeout=10
+            )
+        except requests.RequestException as e:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="KYC service unavailable",
+                status_code=503,
+                http_status=503
+            )
+
+        try:
+            payload = response.json()
+        except ValueError:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Invalid response from KYC service",
+                status_code=502,
+                http_status=502
+            )
+
+        if not payload.get("success"):
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=payload.get("message", "Employee not found"),
+                status_code=404,
+                http_status=404
+            )
+
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="success",
-            message="Member and ceiling retrieved successfully (mock)",
-            data={"member": member_data, "ceiling": ceiling_data},
+            message="Member retrieved successfully",
+            data=payload.get("data"),
             status_code=200,
             http_status=200
         )
+
 
     try:
 

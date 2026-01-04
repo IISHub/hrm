@@ -124,6 +124,7 @@ def create_employee():
     otherAllowances = data.get("otherAllowances")
     GrossSalary = data.get("GrossSalary")
     Nationality = data.get("Nationality")
+    status = data.get("status")
     
     if not FirstName:
         return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="First name is required", status_code=400, http_status=400)
@@ -363,7 +364,8 @@ def create_employee():
         "custom_nrc": NRC_DOCUMENT_URL,
         "custom_cv": CV_DOCUMENT_URL,
         "custom_educationcertificates": CV_EDUCERT_URL,
-        "custom_policereport": POLICE_REPORT_DOC_URL
+        "custom_policereport": POLICE_REPORT_DOC_URL,
+        "status": status,
     })
 
     employee.insert(ignore_permissions=True)
@@ -697,6 +699,7 @@ def update_employee():
     otherAllowances = data.get("otherAllowances")
     GrossSalary = data.get("GrossSalary")
     Nationality = data.get("Nationality")
+    status = data.get("status")
 
     def check_unique(field, value, label):
         if value and frappe.db.exists(
@@ -800,6 +803,7 @@ def update_employee():
         "custom_meal_allowance": MealAllowance,
         "custom_gross_salary": GrossSalary,
         "custom_nationality": Nationality,
+        "status": status,
     }
 
     for field, value in field_map.items():

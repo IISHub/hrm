@@ -1,3 +1,4 @@
+import random
 from hrms.napsa_client.save_files.save import save_file
 from hrms.napsa_client.main import NapsaClient
 from urllib.parse import urljoin
@@ -576,6 +577,28 @@ def get_employee():
 
     department_name = employee.department.split(" - ")[0] if employee.department else None
     shift_name = employee.default_shift if employee.default_shift else None
+    
+    documents = frappe.get_all(
+        "HR Documents",
+        filters={
+            "parent_id": employee.custom_id,  # Use parent_id to link employee
+        },
+        fields=["id", "description", "file"]
+    )
+
+    # Format documents as list of dicts
+    doc_list = []
+    for doc in documents:
+        doc_list.append({
+            "id": doc.get("id"),
+            "description": doc.get("description"),
+            "file": doc.get("file")
+        })
+
+    # If no documents, return an empty list
+    if not doc_list:
+        doc_list = []
+
 
     response_data = {
         "id": str(employee.custom_id),
@@ -661,12 +684,7 @@ def get_employee():
                 "AccountType": employee.custom_bank_account_type
             }
         },
-        "documents": {
-            "Documents[NRC]": employee.custom_nrc,
-            "Documents[CV]": employee.custom_cv,
-            "Documents[EducationCertificates]": employee.custom_educationcertificates,
-            "Documents[PoliceReport]": employee.custom_policereport
-        }
+        "documents": doc_list
     }
 
     return NAPSA_CLIENT_INSTANCE.send_response(
@@ -978,3 +996,141 @@ def delete_employee():
             status_code=500,
             http_status=500
         )
+
+@frappe.whitelist(allow_guest=False)
+def manage_employee_documents():
+    data = frappe.local.form_dict
+    files = frappe.local.request.files
+
+    parent_id = data.get("employeeId")
+    is_update = data.get("isUpdate") == "1"
+    is_delete = data.get("isDelete") == "1"
+    doc_id = data.get("id")  
+
+
+    if not parent_id:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employee ID is required",
+            status_code=400,
+            http_status=400
+        )
+
+    employee_name = frappe.db.get_value(
+        "Employee",
+        {"custom_id": parent_id},
+        "name"
+    )
+
+    if not employee_name:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Employee with ID {parent_id} does not exist",
+            status_code=404,
+            http_status=404
+        )
+  
+    if is_delete:
+        if not doc_id:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Document ID required to delete",
+                status_code=400,
+                http_status=400
+            )
+
+        doc_name = frappe.db.get_value("HR Documents", {"id": doc_id}, "name")
+        
+        if not doc_name:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=f"Document with ID {doc_id} not found",
+                status_code=404,
+                http_status=404
+            )
+
+        try:
+            frappe.delete_doc("HR Documents", doc_name, force=True)
+            frappe.db.commit()
+
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="success",
+                message=f"Document with ID {doc_id} deleted successfully",
+                status_code=200,
+                http_status=200
+            )
+
+        except Exception as e:
+            frappe.log_error(
+                title="Delete HR Document Error",
+                message=frappe.get_traceback()
+            )
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=str(e),
+                status_code=500,
+                http_status=500
+            )
+
+
+    i = 0
+    created_docs = []
+
+    while True:
+        name_key = f"name[{i}]"
+        desc_key = f"description[{i}]"
+        file_key = f"file[{i}]"
+
+        name_val = data.get(name_key)
+        desc_val = data.get(desc_key)
+        file_obj = files.get(file_key)
+
+        if not name_val and not desc_val and not file_obj:
+            break  
+
+        if not name_val or not desc_val or not file_obj:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=f"Missing data for document index {i}",
+                status_code=400,
+                http_status=400
+            )
+
+       
+        saved_file_url = save_file(file_obj, site_name="erpnext.localhost", folder_type="HUMAN_RESOURCE_PDF")
+
+        if is_update and doc_id:
+           
+            doc = frappe.get_doc("HR Documents", doc_id)
+            doc.parent_id = parent_id
+            doc.name1 = name_val
+            doc.description = desc_val
+            existing_files = doc.file.split(",") if doc.file else []
+            doc.file = ",".join(existing_files + [saved_file_url])
+            doc.save()
+            frappe.db.commit()
+            created_docs.append(doc.name)
+        else:
+            random_id = str(random.randint(10000000, 99999999))
+            doc = frappe.get_doc({
+                "doctype": "HR Documents",
+                "id": random_id,
+                "name": random_id,
+                "parent_id": parent_id,
+                "name1": name_val,
+                "description": desc_val,
+                "file": saved_file_url,
+                "is_update": 0,
+                "is_delete": 0
+            }).insert()
+            frappe.db.commit()
+            created_docs.append(doc.name)
+
+        i += 1
+
+    return NAPSA_CLIENT_INSTANCE.send_response(
+        status="success",
+        message=f"{len(created_docs)} document(s) processed",
+        status_code=200,
+        http_status=200
+    )

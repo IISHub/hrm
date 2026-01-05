@@ -103,7 +103,7 @@ def create_employee():
     emergencyContactPhone = data.get("emergencyContactPhone")
     emergencyContactRelationship = data.get("emergencyContactRelationship")
     shift = data.get("shift")
-    reportingManager = data.get("reportingManager")
+    reportingManager = data.get("ReportingManager")
     probationPeriod = data.get("probationPeriod")
     contractEndDate = data.get("contractEndDate")
     workLocation = data.get("workLocation")
@@ -236,6 +236,36 @@ def create_employee():
             status_code=400,
             http_status=400
         )
+        
+    if reportingManager:
+        if not frappe.db.exists("Employee", {"name": reportingManager}):
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message= f"Reporting Manager '{reportingManager}' does not exist.",
+                status_code=400,
+                http_status=400
+            )
+    
+    ALLOWED_MARITAL_STATUS = {
+        "",
+        "Single",
+        "Married",
+        "Divorced",
+        "Widowed",
+    }
+    
+    if MaritalStatus not in ALLOWED_MARITAL_STATUS:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=(
+                f'Marital Status cannot be "{MaritalStatus}". '
+                f'It should be one of {", ".join([v or "Empty" for v in ALLOWED_MARITAL_STATUS])}'
+            ),
+            status_code=400,
+            http_status=400
+        )
+
+
 
 
     shift_name = shift 
@@ -373,7 +403,6 @@ def create_employee():
 
     return NAPSA_CLIENT_INSTANCE.send_response(status="sucesss", message="Employee added successfully", data=[], status_code=201, http_status=201)
 
-
 @frappe.whitelist(allow_guest=True)
 def get_all_employees(page=None, page_size=None):
     try:
@@ -387,29 +416,61 @@ def get_all_employees(page=None, page_size=None):
             http_status=400
         )
 
-    # Ensure sensible pagination values
-    if page < 1:
-        page = 1
-    if page_size < 1:
-        page_size = 10
-    if page_size > 100:
-        page_size = 100
-
+    page = max(page, 1)
+    page_size = max(1, min(page_size, 100))
     offset = (page - 1) * page_size
-    total_employees = frappe.db.count("Employee")
 
+    args = frappe.request.args
+    filters = {}
+
+    if args.get("status"):
+        filters["status"] = args.get("status")
+
+    if args.get("department"):
+        filters["Department"] = args.get("department")
+
+    if args.get("jobTitle"):
+        filters["custom_jobtitle"] = args.get("jobTitle")
+
+    if args.get("workLocation"):
+        filters["custom_work_location"] = args.get("workLocation")
+
+    if args.get("custom_id"):
+        filters["custom_id"] = args.get("id")
+    name = args.get("name")
+    name_filters = []
+    if name:
+        name_filters = [
+            ["Employee", "first_name", "like", f"%{name}%"],
+            ["Employee", "middle_name", "like", f"%{name}%"],
+            ["Employee", "last_name", "like", f"%{name}%"]
+        ]
+
+    if name:
+        total_employees = len(
+            frappe.get_all(
+                "Employee",
+                filters=filters,
+                or_filters=name_filters,
+                fields=["name"]
+            )
+        )
+    else:
+        total_employees = frappe.db.count("Employee", filters=filters)
     employees = frappe.get_all(
         "Employee",
         fields=[
-            "custom_id as id",
+            "custom_id",
             "first_name",
             "middle_name",
             "last_name",
-            "custom_jobtitle as jobTitle",
+            "custom_jobtitle",
             "department",
-            "custom_work_location as location",
+            "custom_work_location",
             "status"
         ],
+        filters=filters,
+        or_filters=name_filters if name else None,
         limit_start=offset,
         limit_page_length=page_size,
         order_by="creation desc"
@@ -418,35 +479,35 @@ def get_all_employees(page=None, page_size=None):
     data = []
     for emp in employees:
         full_name = " ".join(filter(None, [
-            emp.get("first_name"),
-            emp.get("middle_name"),
-            emp.get("last_name")
+            emp.first_name,
+            emp.middle_name,
+            emp.last_name
         ]))
 
-        # Fetch human-readable department name
         department_label = frappe.db.get_value(
             "Department",
-            emp.get("department"),
+            emp.department,
             "department_name"
         ) or ""
 
         data.append({
-            "id": emp.get("id"),
+            "id": emp.custom_id,
             "name": full_name,
-            "jobTitle": emp.get("jobTitle"),
-            "department": department_label, 
-            "location": emp.get("location"),
-            "status": emp.get("status")
+            "jobTitle": emp.custom_jobtitle,
+            "department": department_label,
+            "workLocation": emp.custom_work_location,
+            "status": emp.status
         })
 
+    # ===== Summary =====
     summary = {
         "totalEmployees": total_employees,
-        "active": frappe.db.count("Employee", {"status": "Active"}),
-        "onLeave": frappe.db.count("Employee", {"status": "On Leave"}),
-        "inactive": frappe.db.count("Employee", {"status": "Inactive"})
+        "active": frappe.db.count("Employee", {**filters, "status": "Active"}),
+        "onLeave": frappe.db.count("Employee", {**filters, "status": "On Leave"}),
+        "inactive": frappe.db.count("Employee", {**filters, "status": "Inactive"})
     }
 
-
+    # ===== Meta =====
     locations = frappe.db.sql("""
         SELECT DISTINCT custom_work_location
         FROM tabEmployee
@@ -513,7 +574,7 @@ def get_employee():
 
     employee = frappe.get_doc("Employee", employee_name)
 
-    department_name = employee.department if employee.department else None
+    department_name = employee.department.split(" - ")[0] if employee.department else None
     shift_name = employee.default_shift if employee.default_shift else None
 
     response_data = {
@@ -555,7 +616,7 @@ def get_employee():
         },
         "employmentInfo": {
             "employeeId": employee.employee_number or employee.name,
-            "Department": department_name,
+            "Department":  department_name,
             "JobTitle": getattr(employee, "custom_jobtitle", None),
             "reportingManager": employee.reports_to,
             "EmployeeType": getattr(employee, "custom_employeetype", None),
@@ -701,6 +762,14 @@ def update_employee():
     Nationality = data.get("Nationality")
     status = data.get("status")
 
+    if reportingManager:
+        if not frappe.db.exists("Employee", {"name": reportingManager}):
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message= f"Reporting Manager '{reportingManager}' does not exist.",
+                status_code=400,
+                http_status=400
+            )
     def check_unique(field, value, label):
         if value and frappe.db.exists(
             "Employee",
@@ -716,6 +785,26 @@ def update_employee():
     check_unique("custom_national_registration_number", NrcId, "NRC")
     check_unique("custom_nhima_health_insurance_number", NhimaHealthInsurance, "NHIMA")
     check_unique("custom_social_security_number", SocialSecurityNapsa, "NAPSA")
+    
+    ALLOWED_MARITAL_STATUS = {
+        "",
+        "Single",
+        "Married",
+        "Divorced",
+        "Widowed",
+    }
+    
+    if MaritalStatus:
+        if MaritalStatus not in ALLOWED_MARITAL_STATUS:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=(
+                    f'Marital Status cannot be "{MaritalStatus}". '
+                    f'It should be one of {", ".join([v or "Empty" for v in ALLOWED_MARITAL_STATUS])}'
+                ),
+                status_code=400,
+                http_status=400
+            )
 
 
     if shift:

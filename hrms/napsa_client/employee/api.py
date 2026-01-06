@@ -1,9 +1,11 @@
-import random
 from hrms.napsa_client.save_files.save import save_file
 from hrms.napsa_client.main import NapsaClient
 from urllib.parse import urljoin
 from frappe import _
+import random
 import frappe
+import math
+
 
 
 
@@ -358,7 +360,7 @@ def create_employee():
         "custom_payment_method": PaymentMethod,
         "custom_bank_account_type": AccountType,
         "bank_name": BankName,
-        "custom_accountname": AccountName,
+        "custom_accont_name": AccountName,
         "bank_ac_no": AccountNumber,
         "custom_bank_branch_code": BranchCode,
         "custom_verifiedfromsource": verifiedFromSource,
@@ -428,7 +430,7 @@ def get_all_employees(page=None, page_size=None):
         filters["status"] = args.get("status")
 
     if args.get("department"):
-        filters["Department"] = args.get("department")
+        filters["department"] = args.get("department")
 
     if args.get("jobTitle"):
         filters["custom_jobtitle"] = args.get("jobTitle")
@@ -437,9 +439,11 @@ def get_all_employees(page=None, page_size=None):
         filters["custom_work_location"] = args.get("workLocation")
 
     if args.get("custom_id"):
-        filters["custom_id"] = args.get("id")
+        filters["custom_id"] = args.get("custom_id")
+
     name = args.get("name")
     name_filters = []
+
     if name:
         name_filters = [
             ["Employee", "first_name", "like", f"%{name}%"],
@@ -447,6 +451,7 @@ def get_all_employees(page=None, page_size=None):
             ["Employee", "last_name", "like", f"%{name}%"]
         ]
 
+    # ===== Total Count =====
     if name:
         total_employees = len(
             frappe.get_all(
@@ -458,6 +463,8 @@ def get_all_employees(page=None, page_size=None):
         )
     else:
         total_employees = frappe.db.count("Employee", filters=filters)
+
+    # ===== Fetch Employees =====
     employees = frappe.get_all(
         "Employee",
         fields=[
@@ -521,15 +528,16 @@ def get_all_employees(page=None, page_size=None):
         WHERE status IS NOT NULL
     """, pluck=True)
 
-    returned = len(data)
-    remaining = max(total_employees - (offset + returned), 0)
+    # ===== Pagination (FIXED FORMAT) =====
+    total_pages = math.ceil(total_employees / page_size) if page_size else 0
 
     pagination = {
         "page": page,
         "page_size": page_size,
-        "returned": returned,
-        "remaining": remaining,
-        "total": total_employees
+        "total": total_employees,
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_prev": page > 1
     }
 
     return NAPSA_CLIENT_INSTANCE.send_response(
@@ -545,6 +553,7 @@ def get_all_employees(page=None, page_size=None):
         status_code=200,
         http_status=200
     )
+
 
 
 @frappe.whitelist()
@@ -679,6 +688,7 @@ def get_employee():
             },
             "bankAccount": {
                 "AccountNumber": employee.bank_ac_no,
+                "AccountName": employee.custom_accont_name,
                 "BankName": employee.bank_name,
                 "branchCode": employee.custom_bank_branch_code,
                 "AccountType": employee.custom_bank_account_type
@@ -840,6 +850,8 @@ def update_employee():
         employee.default_shift = shift_id
 
 
+    department_id = None
+
     if department_label:
         department_id = frappe.db.get_value(
             "Department",
@@ -854,6 +866,7 @@ def update_employee():
             })
             dept.insert(ignore_permissions=True)
             department_id = dept.name
+
         employee.department = department_id
 
 
@@ -876,7 +889,7 @@ def update_employee():
         "custom_payment_method": PaymentMethod,
         "custom_bank_account_type": AccountType,
         "bank_name": BankName,
-        "custom_accountname": AccountName,
+        "custom_accont_name": AccountName,
         "bank_ac_no": AccountNumber,
         "custom_bank_branch_code": BranchCode,
         "custom_verifiedfromsource": verifiedFromSource,

@@ -130,8 +130,9 @@ def create_company_human_resource_settings():
    
     
     
-    salary_structures_id = random.randint(100000, 999999)
+    
     for structure in salary_structures:
+        salary_structures_id = random.randint(100000, 999999)
         structure_code = structure.get("structureCode")
         structure_name = structure.get("structureName")
         job_level_code = structure.get("jobLevelCode")
@@ -156,9 +157,10 @@ def create_company_human_resource_settings():
        
                 
 
-        component_id = random.randint(100000, 999999)
+        
         components = structure.get("salaryComponents", [])
         for comp in components:
+            component_id = random.randint(100000, 999999)
             component_code = comp.get("componentCode")
             calc_rule = comp.get("calculationRule", {})
             calc_type = calc_rule.get("type")
@@ -181,8 +183,9 @@ def create_company_human_resource_settings():
            
     
     
-    leave_policy_id = random.randint(100000, 999999)
+    
     for policy in leave_policies:
+        leave_policy_id = random.randint(100000, 999999)
         policy_code = policy.get("policyCode")
         policy_name = policy.get("policyName")
         version = policy.get("version")
@@ -203,9 +206,10 @@ def create_company_human_resource_settings():
         leavePolicyDefinitionsDoc.insert()
        
 
-        rule_id = random.randint(100000, 999999)
+        
         rules = policy.get("leaveRules", [])
         for rule in rules:
+            rule_id = random.randint(100000, 999999)
             leave_type = rule.get("leaveTypeCode")
             annual_entitlement = rule.get("annualEntitlement")
             accrual_frequency = rule.get("accrualFrequency")
@@ -232,8 +236,9 @@ def create_company_human_resource_settings():
             leaveRuleDoc.save()
            
     
-    schedule_id = random.randint(100000, 999999)
+    
     for schedule in work_schedules:
+        schedule_id = random.randint(100000, 999999)
         schedule_code = schedule.get("scheduleCode")
         schedule_name = schedule.get("scheduleName")
         schedule_type = schedule.get("scheduleType")

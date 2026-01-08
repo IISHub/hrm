@@ -404,7 +404,15 @@ def create_employee():
     employee.insert(ignore_permissions=True)
     frappe.db.commit()
 
-    return NAPSA_CLIENT_INSTANCE.send_response(status="sucesss", message="Employee added successfully", data=[], status_code=201, http_status=201)
+    return NAPSA_CLIENT_INSTANCE.send_response(
+        status="sucesss", 
+        message="Employee added successfully", 
+        data={
+                "id": employee_id
+            }, 
+        status_code=201, 
+        http_status=201
+    )
 
 @frappe.whitelist(allow_guest=True)
 def get_all_employees(page=None, page_size=None):
@@ -706,7 +714,7 @@ def get_employee():
     )
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False, methods=["PATCH"])
 def update_employee():
     data = frappe.form_dict
     id = data.get("id")

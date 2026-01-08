@@ -28,7 +28,7 @@
   },
   "salaryStructures": [
     {
-      "structureCode": "EXEC",
+      "+++++++": "EXEC",
       "structureName": "Executive Level",
       "jobLevelCode": "L3",
       "version": "2025",

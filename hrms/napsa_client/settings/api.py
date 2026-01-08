@@ -314,8 +314,6 @@ def create_company_human_resource_settings():
     )
 
 
-
-
 @frappe.whitelist()
 def get_company_human_resource_settings():
     data = frappe.form_dict
@@ -328,14 +326,45 @@ def get_company_human_resource_settings():
             status_code=400,
             http_status=400
         )
-
+        
+    company_list = frappe.get_list(
+            "Company",
+            filters={"custom_company_id": company_id},
+            fields=["name"]
+        )
+    if not company_list:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Company not found",
+            status_code=404,
+            http_status=404
+        )
     general = frappe.get_all(
         "General Settings",
         filters={"company": company_id},
-        fields="*",
+        fields=[
+            "payroll_frequency",
+            "payroll_cut_off_day_of_month",
+            "standard_daily_working_hours",
+            "probation_duration_months",
+            "standard_notice_period_days",
+            "currency"
+        ],
         limit=1
     )
+    
 
+    general_settings = {}
+    if general:
+        g = general[0]
+        general_settings = {
+            "payrollFrequency": g.payroll_frequency,
+            "payrollCutoffDayOfMonth": g.payroll_cut_off_day_of_month,
+            "standardDailyWorkingHours": g.standard_daily_working_hours,
+            "probationDurationMonths": g.probation_duration_months,
+            "standardNoticePeriodDays": g.standard_notice_period_days,
+            "currency": g.currency
+        }
     statutory = frappe.get_all(
         "Statutory Contributions",
         filters={"company": company_id},
@@ -343,64 +372,181 @@ def get_company_human_resource_settings():
         limit=1
     )
 
-    salary_structures = frappe.get_all(
+    statutory_contributions = {}
+    if statutory:
+        s = statutory[0]
+        statutory_contributions = {
+            "napsa": {
+                "enabled": s.napsa_enabled,
+                "employeeContributionRate": s.napsa_employee_contribution_rate,
+                "employerContributionRate": s.napsa_employer_contribution_rate,
+                "contributionBaseComponentCode": s.napsa_contribution_base_component_code
+            },
+            "nhima": {
+                "enabled": s.nhima_enabled,
+                "employeeContributionRate": s.nhima_employee_contribution_rate,
+                "employerContributionRate": s.nhima_employer_contribution_rate
+            },
+            "paye": {
+                "enabled": s.paye_enabled,
+                "taxComputationMethod": s.paye_tax_computation_method,
+                "taxTableCode": s.paye_tax_table_code
+            }
+        }
+
+    salary_structures = []
+    structures = frappe.get_all(
         "Salary Structures",
         filters={"company": company_id},
         fields="*"
     )
 
-    for structure in salary_structures:
-        structure["salaryComponents"] = frappe.get_all(
+    for st in structures:
+        components = frappe.get_all(
             "Salary Components",
-            filters={"salary_structures": structure["id"]},
+            filters={"salary_structures": st.id},
             fields="*"
         )
 
-    leave_policies = frappe.get_all(
+        salary_components = []
+        for c in components:
+            comp = {
+                "componentCode": c.component_code,
+                "calculationRule": {
+                    "type": c.calculation_rule_type
+                }
+            }
+            
+
+            if c.calculation_rule_type in ("PERCENTAGE", "FIXED"):
+                comp["calculationRule"]["calculationValue"] = c.calculation_rule_calculation_value
+
+            if c.calculation_rule_type == "STATUTORY":
+                comp["calculationRule"]["statutoryCode"] = c.statutory_code
+
+            if c.used_as_statutory_base:
+                comp["usedAsStatutoryBase"] = True
+
+
+            salary_components.append(comp)
+
+        salary_structures.append({
+            "id": st.id,
+            "structureCode": st.structure_code,
+            "structureName": st.structure_name,
+            "jobLevelCode": st.job_level_code,
+            "version": st.version,
+            "defaultGrossMonthlySalary": st.default_gross_monthly_salary,
+            "status": st.status,
+            "salaryComponents": salary_components
+        })
+
+    leave_policy_definitions = []
+    policies = frappe.get_all(
         "Leave Policy Definitions",
         filters={"company": company_id},
         fields="*"
     )
 
-    for policy in leave_policies:
-        policy["leaveRules"] = frappe.get_all(
+    for p in policies:
+        rules = frappe.get_all(
             "Leave Rules",
-            filters={"leave_policy_definitions": policy["id"]},
+            filters={"leave_policy_definitions": p.id},
             fields="*"
         )
-    work_schedules = frappe.get_all(
+
+        leave_rules = []
+        for r in rules:
+            leave_rules.append({
+                "id": r.id,
+                "leaveTypeCode": r.leave_type_code,
+                "annualEntitlement": r.annual_entitlement,
+                "accrualFrequency": r.accrual_frequency,
+                "allowCarryForward": r.allow_carry_forward,
+                "maxCarryForwardDays": r.max_carry_forward_days,
+                "allowDuringProbation": r.allow_during_probation,
+                "prorateOnJoin": r.prorate_on_join,
+                "allowNegativeBalance": r.allow_negative_balance
+            })
+
+        leave_policy_definitions.append({
+            "id": p.id,
+            "policyCode": p.policy_code,
+            "policyName": p.policy_name,
+            "version": p.version,
+            "effectiveFrom": p.effective_from,
+            "status": p.status,
+            "leaveRules": leave_rules
+        })
+
+    work_schedules = []
+    schedules = frappe.get_all(
         "Work Schedule Definitions",
         filters={"company": company_id},
         fields="*"
     )
 
-    departments = frappe.get_all(
+    for w in schedules:
+        work_schedules.append({
+            "id": w.id,
+            "scheduleCode": w.schedule_code,
+            "scheduleName": w.schedule_name,
+            "scheduleType": w.schedule_type,
+            "status": w.status,
+            "hoursPerWeek": w.hours_per_week,
+            "weeklyWorkPattern": {
+                "mon": w.weekly_work_pattern_mon,
+                "tue": w.weekly_work_pattern_tue,
+                "wed": w.weekly_work_pattern_wed,
+                "thu": w.weekly_work_pattern_thu,
+                "fri": w.weekly_work_pattern_fri,
+                "sat": w.weekly_work_pattern_sat,
+                "sun": w.weekly_work_pattern_sun
+            }
+        })
+
+    org_departments = frappe.get_all(
         "Organisation Departments",
         filters={"company": company_id},
-        fields="*"
+        fields=["department_code", "department_name"]
     )
+
+    org_departments = [
+        {"id": d.id, "departmentCode": d.department_code, "departmentName": d.department_name}
+        for d in org_departments
+    ]
 
     job_roles = frappe.get_all(
         "Job Role Definitions",
         filters={"company": company_id},
-        fields="*"
+        fields=["department", "job_role_code", "job_role_name"]
     )
 
-    response_data = {
+    job_role_definitions = [
+        {
+            "id": r.id,
+            "department": r.department,
+            "jobRoleCode": r.job_role_code,
+            "jobRoleName": r.job_role_name
+        }
+        for r in job_roles
+    ]
+
+    response = {
         "companyId": company_id,
-        "generalSettings": general[0] if general else {},
-        "statutoryContributions": statutory[0] if statutory else {},
+        "generalSettings": general_settings,
+        "statutoryContributions": statutory_contributions,
         "salaryStructures": salary_structures,
-        "leavePolicyDefinitions": leave_policies,
+        "leavePolicyDefinitions": leave_policy_definitions,
         "workScheduleDefinitions": work_schedules,
-        "orgDepartments": departments,
-        "jobRoleDefinitions": job_roles
+        "orgDepartments": org_departments,
+        "jobRoleDefinitions": job_role_definitions
     }
 
     return NAPSA_CLIENT_INSTANCE.send_response(
         status="success",
         message="Human resource settings retrieved successfully",
-        data=response_data,
+        data=response,
         status_code=200,
         http_status=200
     )

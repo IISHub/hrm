@@ -480,6 +480,7 @@ def get_all_employees(page=None, page_size=None):
             "first_name",
             "middle_name",
             "last_name",
+            "name",
             "custom_jobtitle",
             "department",
             "custom_work_location",
@@ -508,6 +509,7 @@ def get_all_employees(page=None, page_size=None):
 
         data.append({
             "id": emp.custom_id,
+            "employeeId": emp.name,
             "name": full_name,
             "jobTitle": emp.custom_jobtitle,
             "department": department_label,
@@ -619,6 +621,7 @@ def get_employee():
 
     response_data = {
         "id": str(employee.custom_id),
+        "employeeId": employee.employee_number or employee.name,
         "status": employee.status,
         "identityInfo": {
             "NrcId": employee.custom_national_registration_number,
@@ -655,7 +658,6 @@ def get_employee():
             }
         },
         "employmentInfo": {
-            "employeeId": employee.employee_number or employee.name,
             "Department":  department_name,
             "JobTitle": getattr(employee, "custom_jobtitle", None),
             "reportingManager": employee.reports_to,

@@ -513,7 +513,7 @@ def get_company_human_resource_settings():
     org_departments = frappe.get_all(
         "Organisation Departments",
         filters={"company": company_id},
-        fields=["department_code", "department_name"]
+        fields=["id","department_code", "department_name"]
     )
 
     org_departments = [
@@ -524,7 +524,7 @@ def get_company_human_resource_settings():
     job_roles = frappe.get_all(
         "Job Role Definitions",
         filters={"company": company_id},
-        fields=["department", "job_role_code", "job_role_name"]
+        fields=["id", "department", "job_role_code", "job_role_name"]
     )
 
     job_role_definitions = [

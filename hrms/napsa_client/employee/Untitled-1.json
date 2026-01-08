@@ -1,7 +1,220 @@
 {
-    "exception": "frappe.exceptions.ValidationError:  Marital Status cannot be \"Singleupdate\". It should be one of \"\", \"Single\", \"Married\", \"Divorced\", \"Widowed\"",
-    "exc_type": "ValidationError",
-    "_exc_source": "hrms (app)",
-    "exc": "[\"Traceback (most recent call last):\\n  File \\\"apps/frappe/frappe/app.py\\\", line 121, in application\\n    response = frappe.api.handle(request)\\n  File \\\"apps/frappe/frappe/api/__init__.py\\\", line 61, in handle\\n    data = endpoint(**arguments)\\n  File \\\"apps/frappe/frappe/api/v1.py\\\", line 40, in handle_rpc_call\\n    return frappe.handler.handle()\\n  File \\\"apps/frappe/frappe/handler.py\\\", line 52, in handle\\n    data = execute_cmd(cmd)\\n  File \\\"apps/frappe/frappe/handler.py\\\", line 85, in execute_cmd\\n    return frappe.call(method, **frappe.form_dict)\\n  File \\\"apps/frappe/frappe/__init__.py\\\", line 1127, in call\\n    return fn(*args, **newargs)\\n  File \\\"apps/frappe/frappe/utils/typing_validations.py\\\", line 36, in wrapper\\n    return func(*args, **kwargs)\\n  File \\\"apps/hrms/hrms/napsa_client/employee/api.py\\\", line 843, in update_employee\\n    employee.save(ignore_permissions=True)\\n  File \\\"apps/frappe/frappe/model/document.py\\\", line 499, in save\\n    return self._save(*args, **kwargs)\\n  File \\\"apps/frappe/frappe/model/document.py\\\", line 538, in _save\\n    self._validate()\\n  File \\\"apps/frappe/frappe/model/document.py\\\", line 768, in _validate\\n    self._validate_selects()\\n  File \\\"apps/frappe/frappe/model/base_document.py\\\", line 1072, in _validate_selects\\n    frappe.throw(\\n  File \\\"apps/frappe/frappe/utils/messages.py\\\", line 145, in throw\\n    msgprint(\\n  File \\\"apps/frappe/frappe/utils/messages.py\\\", line 106, in msgprint\\n    _raise_exception()\\n  File \\\"apps/frappe/frappe/utils/messages.py\\\", line 57, in _raise_exception\\n    raise exc\\nfrappe.exceptions.ValidationError:  Marital Status cannot be \\\"Singleupdate\\\". It should be one of \\\"\\\", \\\"Single\\\", \\\"Married\\\", \\\"Divorced\\\", \\\"Widowed\\\"\\n\"]",
-    "_server_messages": "[\"{\\\"message\\\":\\\" Marital Status cannot be \\\\\\\"Singleupdate\\\\\\\". It should be one of \\\\\\\"\\\\\\\", \\\\\\\"Single\\\\\\\", \\\\\\\"Married\\\\\\\", \\\\\\\"Divorced\\\\\\\", \\\\\\\"Widowed\\\\\\\"\\\",\\\"title\\\":\\\"Message\\\",\\\"indicator\\\":\\\"red\\\",\\\"raise_exception\\\":1,\\\"__frappe_exc_id\\\":\\\"22ce75589219423285e9c87f9bd865ba3a1b43bb429c81d265cd1d50\\\"}\"]"
+  "companyId": "COMP00003",
+  "generalSettings": {
+    "payrollFrequency": "MONTHLY",
+    "payrollCutoffDayOfMonth": 25,
+    "standardDailyWorkingHours": 8,
+    "probationDurationMonths": 3,
+    "standardNoticePeriodDays": 30,
+    "currency": "ZMW"
+  },
+  "statutoryContributions": {
+    "napsa": {
+      "enabled": true,
+      "employeeContributionRate": 5,
+      "employerContributionRate": 5,
+      "contributionBaseComponentCode": "BASIC"
+    },
+    "nhima": {
+      "enabled": true,
+      "employeeContributionRate": 1,
+      "employerContributionRate": 1
+    },
+    "paye": {
+      "enabled": true,
+      "taxComputationMethod": "TAX_SLAB",
+      "taxTableCode": "ZM_PAYE_2025"
+    }
+  },
+  "salaryStructures": [
+    {
+      "+++++++": "EXEC",
+      "structureName": "Executive Level",
+      "jobLevelCode": "L3",
+      "version": "2025",
+      "defaultGrossMonthlySalary": 240000,
+      "status": "ACTIVE",
+      "salaryComponents": [
+        {
+          "componentCode": "BASIC",
+          "calculationRule": {
+            "type": "PERCENTAGE",
+            "calculationValue": 60
+          },
+          "usedAsStatutoryBase": true
+        },
+        {
+          "componentCode": "HRA",
+          "calculationRule": {
+            "type": "PERCENTAGE",
+            "calculationValue": 20
+          }
+        },
+        {
+          "componentCode": "LTA",
+          "calculationRule": {
+            "type": "PERCENTAGE",
+            "calculationValue": 10
+          }
+        },
+        {
+          "componentCode": "REWARD",
+          "calculationRule": {
+            "type": "FIXED",
+            "calculationValue": 0
+          }
+        },
+        {
+          "componentCode": "NHIMA",
+          "calculationRule": {
+            "type": "STATUTORY",
+            "statutoryCode": "NHIMA"
+          }
+        },
+        {
+          "componentCode": "NAPSA",
+          "calculationRule": {
+            "type": "STATUTORY",
+            "statutoryCode": "NAPSA"
+          }
+        },
+        {
+          "componentCode": "PAYE",
+          "calculationRule": {
+            "type": "STATUTORY",
+            "statutoryCode": "PAYE"
+          }
+        }
+      ]
+    }
+  ],
+  "leavePolicyDefinitions": [
+    {
+      "policyCode": "STANDARD",
+      "policyName": "Standard Leave Policy",
+      "version": "2025",
+      "effectiveFrom": "2025-01-01",
+      "status": "ACTIVE",
+      "leaveRules": [
+        {
+          "leaveTypeCode": "AL",
+          "annualEntitlement": 24,
+          "accrualFrequency": "MONTHLY",
+          "allowCarryForward": true,
+          "maxCarryForwardDays": 12,
+          "allowDuringProbation": false,
+          "prorateOnJoin": true,
+          "allowNegativeBalance": false
+        },
+        {
+          "leaveTypeCode": "SL",
+          "annualEntitlement": 14,
+          "accrualFrequency": "YEARLY",
+          "allowCarryForward": false,
+          "allowDuringProbation": true,
+          "prorateOnJoin": false,
+          "allowNegativeBalance": false
+        }
+      ]
+    }
+  ],
+  "workScheduleDefinitions": [
+    {
+      "scheduleCode": "STD",
+      "scheduleName": "Standard Work Week",
+      "scheduleType": "FIXED",
+      "status": "ACTIVE",
+      "hoursPerWeek": 40,
+      "weeklyWorkPattern": {
+        "mon": "OFFICE",
+        "tue": "OFFICE",
+        "wed": "OFFICE",
+        "thu": "OFFICE",
+        "fri": "OFFICE",
+        "sat": "OFF",
+        "sun": "OFF"
+      }
+    }
+  ],
+  "jobLevels": [
+    {
+      "levelCode": "L1",
+      "levelName": "Junior",
+      "hierarchyRank": 1
+    },
+    {
+      "levelCode": "L2",
+      "levelName": "Mid",
+      "hierarchyRank": 2
+    },
+    {
+      "levelCode": "L3",
+      "levelName": "Senior",
+      "hierarchyRank": 3
+    }
+  ],
+  "salaryComponentDefinitions": [
+    {
+      "componentCode": "BASIC",
+      "componentName": "Basic Salary",
+      "componentType": "EARNING",
+      "isTaxable": true
+    },
+    {
+      "componentCode": "HRA",
+      "componentName": "House Allowance",
+      "componentType": "EARNING",
+      "isTaxable": true
+    },
+    {
+      "componentCode": "LTA",
+      "componentName": "Leave Travel Allowance",
+      "componentType": "EARNING",
+      "isTaxable": true
+    },
+    {
+      "componentCode": "REWARD",
+      "componentName": "Reward",
+      "componentType": "EARNING",
+      "isTaxable": true
+    },
+    {
+      "componentCode": "NHIMA",
+      "componentName": "NHIMA",
+      "componentType": "DEDUCTION",
+      "isTaxable": false
+    },
+    {
+      "componentCode": "NAPSA",
+      "componentName": "NAPSA",
+      "componentType": "DEDUCTION",
+      "isTaxable": false
+    },
+    {
+      "componentCode": "PAYE",
+      "componentName": "PAYE",
+      "componentType": "DEDUCTION",
+      "isTaxable": false
+    }
+  ],
+  "orgDepartments": [
+    {
+      "departmentCode": "ENG",
+      "departmentName": "Engineering"
+    },
+    {
+      "departmentCode": "HR",
+      "departmentName": "Human Resources"
+    }
+  ],
+  "jobRoleDefinitions": [
+    {  "departcode": "eng",
+      "jobRoleCode": "SDE",
+      "jobRoleName": "Software Developer"
+    },
+    {   "departcode": "HR",
+      "jobRoleCode": "HRM",
+      "jobRoleName": "HR Manager"
+    }
+  ]
 }

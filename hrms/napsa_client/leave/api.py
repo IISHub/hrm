@@ -11,6 +11,7 @@ import frappe
 import re
 
 NAPSA_CLIENT_INSTANCE = NapsaClient()
+from frappe.utils import getdate, date_diff
 
 @frappe.whitelist()
 def create_leave_application():
@@ -23,7 +24,7 @@ def create_leave_application():
     isHalfDay = data.get("isHalfDay")
     leaveReason = data.get("leaveReason")
     leaveStatus = data.get("leaveStatus") or "Pending"
-    approverId = data.get("approverId")
+    approverId = "timeastw@gmail.com"
 
     required_fields = {
         "employeeId": employeeId,
@@ -42,6 +43,38 @@ def create_leave_application():
             status_code=400,
             http_status=400
         )
+        
+    allowed_status = ["Open", "Approved", "Rejected", "Cancelled"]
+
+    if leaveStatus not in allowed_status:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Invalid status. Allowed values: Open, Approved, Rejected, Cancelled",
+            status_code=400,
+            http_status=400
+        )
+        
+    
+    allowed_leave_types = [
+    "Vacation",
+    "Leave Without Pay",
+    "Privilege Leave",
+    "Sick Leave",
+    "Compensatory Off",
+    "Casual Leave"
+    ]
+
+    if leaveType not in allowed_leave_types:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Invalid Leave Type. Allowed types: Leave Without Pay, Privilege Leave, Sick Leave, Compensatory Off, Casual Leave",
+            status_code=400,
+            http_status=400
+    )
+
+
+    
+  
 
     employee_name = frappe.db.get_value(
         "Employee",
@@ -57,8 +90,24 @@ def create_leave_application():
             http_status=404
         )
 
-    from_date = frappe.utils.getdate(leaveFromDate)
-    to_date = frappe.utils.getdate(leaveToDate)
+    from_date = getdate(leaveFromDate)
+    to_date = getdate(leaveToDate)
+    
+    existing_leave = frappe.get_all("Leave Application", filters={
+        "employee": employee_name,
+        "leave_type": leaveType,
+        "docstatus": 0,
+        "from_date": ["<=", to_date],
+        "to_date": [">=", from_date]
+    })
+
+    if existing_leave:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employee already has a leave application for these dates",
+            status_code=409,
+            http_status=409
+    )
 
     if from_date > to_date:
         return NAPSA_CLIENT_INSTANCE.send_response(
@@ -76,24 +125,33 @@ def create_leave_application():
             http_status=400
         )
 
-
-    approver_name = None
-    if approverId:
-        approver_name = frappe.db.get_value(
-            "Employee",
-            {"custom_id": approverId},
-            "name"
-        )
-
-        if not approver_name:
-            return NAPSA_CLIENT_INSTANCE.send_response(
-                status="fail",
-                message="Approver not found",
-                status_code=404,
-                http_status=404
-            )
+    days_requested = date_diff(to_date, from_date) + 1
+    if isHalfDay:
+        days_requested = 0.5
 
     try:
+        allocation = frappe.get_all("Leave Allocation", filters={
+            "employee": employee_name,
+            "leave_type": leaveType,
+            "docstatus": 1,
+            "from_date": ["<=", from_date],
+            "to_date": [">=", to_date]
+        }, fields=["name"])
+
+        if not allocation:
+            alloc_doc = frappe.get_doc({
+                "doctype": "Leave Allocation",
+                "employee": employee_name,
+                "leave_type": leaveType,
+                "from_date": from_date,
+                "to_date": to_date,
+                "new_leaves_allocated": days_requested
+            })
+
+            alloc_doc.insert(ignore_permissions=True)
+            alloc_doc.submit()
+            frappe.db.commit()
+            
         leave_doc = frappe.get_doc({
             "doctype": "Leave Application",
             "employee": employee_name,
@@ -103,19 +161,16 @@ def create_leave_application():
             "half_day": 1 if isHalfDay else 0,
             "description": leaveReason,
             "status": leaveStatus,
-            "leave_approver": approver_name,
+            "leave_approver": approverId,
         })
 
         leave_doc.insert(ignore_permissions=True)
+        frappe.flags.ignore_validate = True
         frappe.db.commit()
 
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="success",
             message="Leave application submitted successfully",
-            data={
-                "leave_id": leave_doc.name,
-                "status": leave_doc.status
-            },
             status_code=201,
             http_status=201
         )

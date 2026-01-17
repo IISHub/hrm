@@ -556,20 +556,6 @@ def get_company_human_resource_settings():
         http_status=200
     )
 
-
-
-@frappe.whitelist()
-def update_company_human_resource_settings():
-    data = frappe.form_dict
-
-    return NAPSA_CLIENT_INSTANCE.send_response(
-        status="success",
-        message="Human resource settings updated successfully",
-        status_code=200,
-        http_status=200
-    )
-
-
 @frappe.whitelist()
 def delete_company_human_resource_settings():
     data = frappe.form_dict
@@ -633,3 +619,136 @@ def delete_company_human_resource_settings():
             http_status=500
         )
 
+
+
+@frappe.whitelist(allow_guest=False, methods=["PATCH"])
+def update_company_human_resource_settings():
+    data = frappe.request.get_json() or {}
+    print("RAW PAYLOAD:", data)
+
+    company_id = data.get("companyId")
+    print("Company ID:", company_id)
+
+    if not company_id:
+        print("Missing companyId")
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Company id is required",
+            status_code=400,
+            http_status=400
+        )
+
+    # Get company name from custom ID
+    company = frappe.get_value("Company", {"custom_company_id": company_id}, "name")
+    print("Resolved Company Name:", company)
+
+    if not company:
+        print("Company not found")
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Company not found",
+            status_code=404,
+            http_status=404
+        )
+
+    def set_if_present(doc, field, value, transform=None):
+        if value is None:
+            return
+        val = transform(value) if transform else value
+        old_val = getattr(doc, field, None)
+        if old_val != val:
+            setattr(doc, field, val)
+            print(f"Field '{field}' updated: {old_val} -> {val}")
+
+    try:
+        print("BEGIN TRANSACTION")
+        frappe.db.begin()
+
+        general_settings_payload = data.get("generalSettings", {})
+        statutory_contributions_payload = data.get("statutoryContributions", {})
+
+        print("General Settings Payload:", general_settings_payload)
+        print("Statutory Contributions Payload:", statutory_contributions_payload)
+
+        # ----------------------------
+        # GENERAL SETTINGS
+        # ----------------------------
+        gs_meta = frappe.get_meta("General Settings")
+        if gs_meta.issingle:
+            print("Using SINGLE General Settings")
+            gs = frappe.get_single("General Settings")
+        else:
+            gs_name = frappe.get_value("General Settings", {"company": company}, "name")
+            print("Existing General Settings Name:", gs_name)
+            gs = frappe.get_doc("General Settings", gs_name) if gs_name else frappe.new_doc("General Settings")
+            gs.company = company
+
+        # Set fields if present
+        set_if_present(gs, "payroll_frequency", general_settings_payload.get("payrollFrequency"))
+        set_if_present(gs, "payroll_cut_off_day_of_month", general_settings_payload.get("payrollCutoffDayOfMonth"))
+        set_if_present(gs, "standard_daily_working_hours", general_settings_payload.get("standardDailyWorkingHours"))
+        set_if_present(gs, "probation_duration_months", general_settings_payload.get("probationDurationMonths"))
+        set_if_present(gs, "standard_notice_period_days", general_settings_payload.get("standardNoticePeriodDays"))
+        set_if_present(gs, "currency", general_settings_payload.get("currency"))
+
+        print("General Settings before save:", gs.as_dict())
+        gs.save(ignore_permissions=True)
+        print("General Settings saved")
+
+        # ----------------------------
+        # STATUTORY CONTRIBUTIONS
+        # ----------------------------
+        napsa = statutory_contributions_payload.get("napsa", {})
+        nhima = statutory_contributions_payload.get("nhima", {})
+        paye = statutory_contributions_payload.get("paye", {})
+
+        sc_meta = frappe.get_meta("Statutory Contributions")
+        if sc_meta.issingle:
+            print("Using SINGLE Statutory Contributions")
+            sc = frappe.get_single("Statutory Contributions")
+        else:
+            sc_name = frappe.get_value("Statutory Contributions", {"company": company}, "name")
+            print("Existing Statutory Contributions Name:", sc_name)
+            sc = frappe.get_doc("Statutory Contributions", sc_name) if sc_name else frappe.new_doc("Statutory Contributions")
+            sc.company = company
+
+
+        set_if_present(sc, "napsa_enabled", napsa.get("enabled"))
+        set_if_present(sc, "napsa_employee_contribution_rate", napsa.get("employeeContributionRate"))
+        set_if_present(sc, "napsa_employer_contribution_rate", napsa.get("employerContributionRate"))
+        set_if_present(sc, "napsa_contribution_base_component_code", napsa.get("contributionBaseComponentCode"))
+
+        set_if_present(sc, "nhima_enabled", nhima.get("enabled"))
+        set_if_present(sc, "nhima_employee_contribution_rate", nhima.get("employeeContributionRate"))
+        set_if_present(sc, "nhima_employer_contribution_rate", nhima.get("employerContributionRate"))
+
+        set_if_present(sc, "paye_enabled", paye.get("enabled"))
+        set_if_present(sc, "paye_tax_computation_method", paye.get("taxComputationMethod"))
+        # For PAYE, use flatRatePercentage if taxTableCode not provided
+        set_if_present(sc, "paye_tax_table_code", paye.get("taxTableCode") or paye.get("flatRatePercentage"))
+
+        print("Statutory Contributions before save:", sc.as_dict())
+        sc.save(ignore_permissions=True)
+        print("Statutory Contributions saved")
+
+        frappe.db.commit()
+        print("TRANSACTION COMMITTED")
+
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="success",
+            message="Human resource settings updated successfully",
+            status_code=200,
+            http_status=200
+        )
+
+    except Exception as e:
+        frappe.db.rollback()
+        print("ERROR OCCURRED:", str(e))
+        frappe.log_error(frappe.get_traceback(), "HR SETTINGS UPDATE FAILED")
+
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Failed to update human resource settings",
+            status_code=500,
+            http_status=500
+        )

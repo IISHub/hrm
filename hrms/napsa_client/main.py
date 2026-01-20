@@ -60,3 +60,6 @@ class NapsaClient():
     def get_employeer_account(self):
         return self.EMPLOYER_ACCOUNT_NUMBER
     
+    def get_approver_name(self):
+        return "timeastw@gmail.com"
+    

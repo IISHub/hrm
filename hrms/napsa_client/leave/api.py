@@ -1,11 +1,4 @@
-import json
-import random
-import uuid
-from hrms.napsa_client.config.settings import NAPSA_BASE_URL, CLIENT_ID, USERNAME, PASSWORD
 from hrms.napsa_client.main import NapsaClient
-from hrms.napsa_client.mocks.mock import mock_get_by_nrc
-from urllib.parse import urljoin
-import requests
 from frappe import _
 import frappe
 import re
@@ -24,7 +17,7 @@ def create_leave_application():
     isHalfDay = data.get("isHalfDay")
     leaveReason = data.get("leaveReason")
     leaveStatus = data.get("leaveStatus") or "Pending"
-    approverId = "timeastw@gmail.com"
+    approverId = NAPSA_CLIENT_INSTANCE.get_approver_name()
 
     required_fields = {
         "employeeId": employeeId,
@@ -394,20 +387,15 @@ def get_leave_balances():
 
 
 
-@frappe.whitelist(allow_guest=False, methods=["POST"])
+@frappe.whitelist(allow_guest=False, methods=["PATCH"])
 def update_leave_status():
     data = frappe.form_dict
     leave_id = data.get("leaveId")
     new_status = data.get("status")
-
-    if not leave_id:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="leaveId is required",
-            status_code=400,
-            http_status=400
-        )
-
+    rejectionReason = data.get("rejectionReason")
+    
+    ALLOWED_STATUSES = ["Approved", "Rejected"]
+    
     if not new_status:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
@@ -416,20 +404,35 @@ def update_leave_status():
             http_status=400
         )
 
-    valid_status = ["Open", "Approved", "Rejected", "Cancelled"]
-
-    if new_status not in valid_status:
+    if new_status not in ALLOWED_STATUSES:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
-            message=f"Invalid status. Allowed values: {', '.join(valid_status)}",
+            message=f"Invalid status. Allowed values: {', '.join(ALLOWED_STATUSES)}",
             status_code=400,
             http_status=400
         )
+
+    if new_status == "Rejected" and not rejectionReason:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="rejectionReason is required when status is Rejected",
+            status_code=400,
+            http_status=400
+        )
+    if not leave_id:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="leaveId is required",
+            status_code=400,
+            http_status=400
+        )
+
 
     try:
         leave_doc = frappe.get_doc("Leave Application", leave_id)
 
         leave_doc.status = new_status
+        leave_doc.custom_rejection_reason = rejectionReason
         leave_doc.save()
         frappe.db.commit()
 
@@ -439,6 +442,7 @@ def update_leave_status():
             data={
                 "leaveId": leave_id,
                 "newStatus": new_status
+                
             },
             status_code=200,
             http_status=200
@@ -446,6 +450,307 @@ def update_leave_status():
 
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Update Leave Status Error")
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=str(e),
+            status_code=500,
+            http_status=500
+        )
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET"])
+def get_all_pending_leaves():
+    args = frappe.request.args
+    try:
+        page = int(args.get("page", 0))
+        page_size = int(args.get("page_size", 0))
+    except (TypeError, ValueError):
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Page and page_size must be integers",
+            status_code=400,
+            http_status=400
+        )
+
+    if page <= 0:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Page parameter must be a positive integer",
+            status_code=400,
+            http_status=400
+        )
+
+    if page_size <= 0:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Page size parameter must be a positive integer",
+            status_code=400,
+            http_status=400
+        )
+
+    start = (page - 1) * page_size
+    total = frappe.db.count(
+        "Leave Application",
+        filters={
+            "status": "Open",
+            "docstatus": 0
+        }
+    )
+
+    pending_leaves = frappe.db.sql("""
+        SELECT
+            la.name AS leave_id,
+            emp.employee_name,
+            lt.leave_type_name,
+            la.from_date,
+            la.to_date,
+            la.total_leave_days,
+            la.description,
+            la.status,
+            la.creation
+        FROM `tabLeave Application` la
+        LEFT JOIN `tabEmployee` emp ON emp.name = la.employee
+        LEFT JOIN `tabLeave Type` lt ON lt.name = la.leave_type
+        WHERE la.status = 'Open'
+        AND la.docstatus = 0
+        ORDER BY la.creation DESC
+        LIMIT %s OFFSET %s
+    """, (page_size, start), as_dict=True)
+
+    leaves = []
+    for row in pending_leaves:
+        leaves.append({
+            "leaveId": row.leave_id,
+            "employee": {
+                "employeeName": row.employee_name
+            },
+            "leaveType": {
+                "name": row.leave_type_name
+            },
+            "duration": {
+                "fromDate": str(row.from_date),
+                "toDate": str(row.to_date),
+                "totalDays": row.total_leave_days
+            },
+            "leaveReason": row.description,
+            "status": row.status.upper(),
+            "appliedOn": row.creation.strftime("%Y-%m-%d")
+        })
+
+    total_pages = (total + page_size - 1) // page_size
+
+    return NAPSA_CLIENT_INSTANCE.send_response_list(
+        status="success",
+        message="Pending leaves fetched successfully",
+        data={
+            "leaves": leaves,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1
+            }
+        },
+        status_code=200,
+        http_status=200
+    )
+
+
+@frappe.whitelist(allow_guest=False, methods=["PATCH"])
+def cancel_leave():
+    data = frappe.form_dict
+    leave_id = data.get("leaveId")
+
+    if not leave_id:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="leaveId is required",
+            status_code=400,
+            http_status=400
+        )
+
+    try:
+        leave_doc = frappe.get_doc("Leave Application", leave_id)
+
+        if leave_doc.docstatus != 0:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Only draft leaves can be cancelled",
+                status_code=400,
+                http_status=400
+            )
+
+        if leave_doc.status != "Open":
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Only OPEN leaves can be cancelled",
+                status_code=400,
+                http_status=400
+            )
+
+        leave_doc.status = "Cancelled"
+        leave_doc.save(ignore_permissions=True)
+        frappe.db.commit()
+
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="success",
+            message="Leave cancelled successfully",
+            data={
+                "leaveId": leave_id,
+                "status": "CANCELLED"
+            },
+            status_code=200,
+            http_status=200
+        )
+
+    except frappe.DoesNotExistError:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Leave application not found",
+            status_code=404,
+            http_status=404
+        )
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Cancel Leave Error")
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=str(e),
+            status_code=500,
+            http_status=500
+        )
+
+
+@frappe.whitelist(allow_guest=False, methods=["PUT"])
+def update_leave_application():
+    data = frappe.form_dict
+
+    leave_id = data.get("leaveId")
+    leaveType = data.get("leaveType")
+    leaveFromDate = data.get("leaveFromDate")
+    leaveToDate = data.get("leaveToDate")
+    isHalfDay = data.get("isHalfDay")
+    leaveReason = data.get("leaveReason")
+
+    if not leave_id:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="leaveId is required",
+            status_code=400,
+            http_status=400
+        )
+
+    required_fields = {
+        "leaveType": leaveType,
+        "leaveFromDate": leaveFromDate,
+        "leaveToDate": leaveToDate,
+        "leaveReason": leaveReason,
+    }
+
+    missing_fields = [k for k, v in required_fields.items() if not v]
+    if missing_fields:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Missing required fields: {', '.join(missing_fields)}",
+            status_code=400,
+            http_status=400
+        )
+
+    allowed_leave_types = [
+        "Vacation",
+        "Leave Without Pay",
+        "Privilege Leave",
+        "Sick Leave",
+        "Compensatory Off",
+        "Casual Leave"
+    ]
+
+    if leaveType not in allowed_leave_types:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Invalid Leave Type",
+            status_code=400,
+            http_status=400
+        )
+
+    try:
+        leave_doc = frappe.get_doc("Leave Application", leave_id)
+        if leave_doc.status != "Open":
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Only OPEN leaves can be updated",
+                status_code=400,
+                http_status=400
+            )
+
+        from_date = getdate(leaveFromDate)
+        to_date = getdate(leaveToDate)
+
+        if from_date > to_date:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Leave From Date cannot be later than Leave To Date",
+                status_code=400,
+                http_status=400
+            )
+
+        if isHalfDay and from_date != to_date:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Half-day leave must be for a single day",
+                status_code=400,
+                http_status=400
+            )
+        existing_leave = frappe.get_all(
+            "Leave Application",
+            filters={
+                "employee": leave_doc.employee,
+                "name": ["!=", leave_id],
+                "docstatus": 0,
+                "from_date": ["<=", to_date],
+                "to_date": [">=", from_date]
+            }
+        )
+
+        if existing_leave:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Employee already has a leave application for these dates",
+                status_code=409,
+                http_status=409
+            )
+
+        leave_doc.leave_type = leaveType
+        leave_doc.from_date = from_date
+        leave_doc.to_date = to_date
+        leave_doc.half_day = 1 if isHalfDay else 0
+        leave_doc.description = leaveReason
+
+        leave_doc.save(ignore_permissions=True)
+        frappe.db.commit()
+
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="success",
+            message="Leave application updated successfully",
+            data={
+                "leaveId": leave_id
+            },
+            status_code=200,
+            http_status=200
+        )
+
+    except frappe.DoesNotExistError:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Leave application not found",
+            status_code=404,
+            http_status=404
+        )
+
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Leave Application Update Error")
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
             message=str(e),

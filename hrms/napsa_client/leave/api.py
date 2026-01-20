@@ -642,22 +642,6 @@ def update_leave_application():
             http_status=400
         )
 
-    required_fields = {
-        "leaveType": leaveType,
-        "leaveFromDate": leaveFromDate,
-        "leaveToDate": leaveToDate,
-        "leaveReason": leaveReason,
-    }
-
-    missing_fields = [k for k, v in required_fields.items() if not v]
-    if missing_fields:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message=f"Missing required fields: {', '.join(missing_fields)}",
-            status_code=400,
-            http_status=400
-        )
-
     allowed_leave_types = [
         "Vacation",
         "Leave Without Pay",
@@ -667,13 +651,14 @@ def update_leave_application():
         "Casual Leave"
     ]
 
-    if leaveType not in allowed_leave_types:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="Invalid Leave Type",
-            status_code=400,
-            http_status=400
-        )
+    if leaveType: 
+        if leaveType not in allowed_leave_types:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Invalid Leave Type",
+                status_code=400,
+                http_status=400
+            )
 
     try:
         leave_doc = frappe.get_doc("Leave Application", leave_id)

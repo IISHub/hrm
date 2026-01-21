@@ -9,6 +9,22 @@ import re
 NAPSA_CLIENT_INSTANCE = NapsaClient()
 from frappe.utils import getdate, date_diff, nowdate
 
+
+def has_leave_overlap(employee, leave_type, from_date, to_date):
+    return frappe.db.exists(
+        "Leave Application",
+        {
+            "employee": employee,
+            "leave_type": leave_type,
+            "status": ["!=", "Cancelled"],
+            "docstatus": ["in", [0, 1]],
+            "from_date": ["<=", to_date],
+            "to_date": [">=", from_date]
+        }
+    )
+
+
+
 def get_holiday_dates(from_date, to_date):
     holidays = frappe.get_all(
         "Holiday List",
@@ -93,14 +109,7 @@ def create_leave_application():
         )
         
     
-    allowed_leave_types = [
-    "Vacation",
-    "Leave Without Pay",
-    "Privilege Leave",
-    "Sick Leave",
-    "Compensatory Off",
-    "Casual Leave"
-    ]
+    allowed_leave_types = NAPSA_CLIENT_INSTANCE.getAllAllowedLeaveTypes()
 
     if leaveType not in allowed_leave_types:
         return NAPSA_CLIENT_INSTANCE.send_response(
@@ -162,12 +171,22 @@ def create_leave_application():
     days_requested = 0.5 if isHalfDay else calculate_working_days(from_date, to_date)
     print("Days requested:", days_requested)
     
+    if has_leave_overlap(employee_name, leaveType, from_date, to_date):
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employee already has an overlapping leave application",
+            status_code=400,
+            http_status=400
+        )
+
+
+    
     
     allocation = frappe.get_all("Leave Allocation", filters={
         "employee": employee_name,
         "leave_type": leaveType,
         "docstatus": 1
-    }, fields=["name", "unused_leaves"], limit=1)
+    }, fields=["name", "total_leaves_allocated"], limit=1)
 
     if not allocation:
         return NAPSA_CLIENT_INSTANCE.send_response(
@@ -178,7 +197,7 @@ def create_leave_application():
         )
 
     alloc = allocation[0]
-    balance = alloc.unused_leaves
+    balance = alloc.total_leaves_allocated
 
     if balance < days_requested:
         return NAPSA_CLIENT_INSTANCE.send_response(
@@ -189,29 +208,7 @@ def create_leave_application():
         )
 
 
-    try:
-        allocation = frappe.get_all("Leave Allocation", filters={
-            "employee": employee_name,
-            "leave_type": leaveType,
-            "docstatus": 1,
-            "from_date": ["<=", from_date],
-            "to_date": [">=", to_date]
-        }, fields=["name"])
-
-        if not allocation:
-            alloc_doc = frappe.get_doc({
-                "doctype": "Leave Allocation",
-                "employee": employee_name,
-                "leave_type": leaveType,
-                "from_date": from_date,
-                "to_date": to_date,
-                "new_leaves_allocated": days_requested
-            })
-
-            alloc_doc.insert(ignore_permissions=True)
-            alloc_doc.submit()
-            frappe.db.commit()
-            
+    try:    
         leave_doc = frappe.get_doc({
             "doctype": "Leave Application",
             "employee": employee_name,
@@ -462,12 +459,22 @@ def get_leave_balances():
 @frappe.whitelist(allow_guest=False, methods=["PATCH"])
 def update_leave_status():
     data = frappe.form_dict
+
     leave_id = data.get("leaveId")
     new_status = data.get("status")
-    rejectionReason = data.get("rejectionReason")
-    
+    rejection_reason = data.get("rejectionReason")
+
     ALLOWED_STATUSES = ["Approved", "Rejected"]
-    
+
+    # ------------------ Validations ------------------
+    if not leave_id:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="leaveId is required",
+            status_code=400,
+            http_status=400
+        )
+
     if not new_status:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
@@ -484,40 +491,72 @@ def update_leave_status():
             http_status=400
         )
 
-    if new_status == "Rejected" and not rejectionReason:
+    if new_status == "Rejected" and not rejection_reason:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
             message="rejectionReason is required when status is Rejected",
             status_code=400,
             http_status=400
         )
-    if not leave_id:
+
+    # ------------------ Fetch Leave ------------------
+    if not frappe.db.exists("Leave Application", leave_id):
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
-            message="leaveId is required",
-            status_code=400,
-            http_status=400
+            message="Leave application not found",
+            status_code=404,
+            http_status=404
         )
-
 
     try:
         leave_doc = frappe.get_doc("Leave Application", leave_id)
 
-        leave_doc.status = new_status
-        leave_doc.custom_rejection_reason = rejectionReason
-        leave_doc.save()
+        # ------------------ Approve Leave ------------------
+        if new_status == "Approved":
+
+            if leave_doc.docstatus == 1:
+                return NAPSA_CLIENT_INSTANCE.send_response(
+                    status="fail",
+                    message="Leave application is already approved",
+                    status_code=400,
+                    http_status=400
+                )
+
+            leave_doc.status = "Approved"
+            leave_doc.custom_rejection_reason = None
+            leave_doc.submit()
+
+
+        elif new_status == "Rejected":
+
+            if leave_doc.docstatus == 1:
+                return NAPSA_CLIENT_INSTANCE.send_response(
+                    status="fail",
+                    message="Submitted leave cannot be rejected. Cancel it instead.",
+                    status_code=400,
+                    http_status=400
+                )
+
+            leave_doc.status = "Rejected"
+            leave_doc.custom_rejection_reason = rejection_reason
+            leave_doc.save()
+
         frappe.db.commit()
 
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="success",
-            message="Leave status updated successfully",
-            data={
-                "leaveId": leave_id,
-                "newStatus": new_status
-                
-            },
+            message=f"Leave successfully {new_status.lower()}",
+            data=[],
             status_code=200,
             http_status=200
+        )
+
+    except frappe.PermissionError:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="You do not have permission to update this leave application",
+            status_code=403,
+            http_status=403
         )
 
     except Exception as e:

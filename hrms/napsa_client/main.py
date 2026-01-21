@@ -63,3 +63,8 @@ class NapsaClient():
     def get_approver_name(self):
         return "timeastw@gmail.com"
     
+    def getAllAllowedLeaveTypes(self):
+        leaves = frappe.get_all("Leave Type", pluck="name")
+        print("**** allowed leaves ****", leaves)
+        return leaves
+    

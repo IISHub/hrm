@@ -1,10 +1,55 @@
 from hrms.napsa_client.main import NapsaClient
+from frappe.utils import getdate, date_diff
+from datetime import timedelta
+from frappe.utils import cint
 from frappe import _
 import frappe
 import re
 
 NAPSA_CLIENT_INSTANCE = NapsaClient()
 from frappe.utils import getdate, date_diff, nowdate
+
+def get_holiday_dates(from_date, to_date):
+    holidays = frappe.get_all(
+        "Holiday List",
+        filters={
+            "from_date": ["<=", to_date],
+            "to_date": [">=", from_date]
+        },
+        fields=["from_date", "to_date"]
+    )
+
+    holiday_dates = set()
+    for h in holidays:
+        current = h.from_date
+        while current <= h.to_date:
+            holiday_dates.add(current)
+            current += timedelta(days=1)
+
+    return holiday_dates
+
+
+
+def calculate_working_days(from_date, to_date):
+    holidays = get_holiday_dates(from_date, to_date)
+    print("Holiday set:", holidays)
+
+    working_days = 0
+    current = from_date
+
+    while current <= to_date:
+        if current not in holidays:
+            working_days += 1
+
+        print("Checking date:", current, "Working days so far:", working_days)
+
+        current += timedelta(days=1)
+
+    print("Total working days:", working_days)
+
+    return working_days
+
+
 
 @frappe.whitelist()
 def create_leave_application():
@@ -114,9 +159,35 @@ def create_leave_application():
             http_status=400
         )
 
-    days_requested = date_diff(to_date, from_date) + 1
-    if isHalfDay:
-        days_requested = 0.5
+    days_requested = 0.5 if isHalfDay else calculate_working_days(from_date, to_date)
+    print("Days requested:", days_requested)
+    
+    
+    allocation = frappe.get_all("Leave Allocation", filters={
+        "employee": employee_name,
+        "leave_type": leaveType,
+        "docstatus": 1
+    }, fields=["name", "unused_leaves"], limit=1)
+
+    if not allocation:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="No active leave allocation found",
+            status_code=400,
+            http_status=400
+        )
+
+    alloc = allocation[0]
+    balance = alloc.unused_leaves
+
+    if balance < days_requested:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Insufficient leave balance for Leave Type {leaveType}",
+            status_code=400,
+            http_status=400
+        )
+
 
     try:
         allocation = frappe.get_all("Leave Allocation", filters={
@@ -151,6 +222,7 @@ def create_leave_application():
             "description": leaveReason,
             "status": leaveStatus,
             "leave_approver": approverId,
+            "total_leave_days": days_requested
         })
 
         leave_doc.insert(ignore_permissions=True)
@@ -742,3 +814,179 @@ def update_leave_application():
             status_code=500,
             http_status=500
         )
+
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET"])
+def get_leave_by_id():
+    data = frappe.form_dict
+    leaveId = data.get("leaveId")
+
+    if not leaveId:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Leave ID is required",
+            status_code=400,
+            http_status=400
+        )
+
+
+    if not frappe.db.exists("Leave Application", leaveId):
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Leave not found",
+            status_code=404,
+            http_status=404
+        )
+
+    leave = frappe.get_doc("Leave Application", leaveId)
+    employee = frappe.db.get_value(
+        "Employee",
+        leave.employee,
+        ["custom_id", "employee_name", "department"],
+        as_dict=True
+    )
+
+ 
+    approver_data = None
+    if leave.leave_approver:
+        approver = frappe.db.get_value(
+            "Employee",
+            leave.leave_approver,
+            ["name", "employee_name"],
+            as_dict=True
+        )
+        if approver:
+            approver_data = {
+                "approverId": approver.name,
+                "approverName": approver.employee_name
+            }
+
+    response = {
+        "leaveId": leave.name,
+
+        "employee": {
+            "employeeId": employee.custom_id if employee else None,
+            "employeeName": employee.employee_name if employee else None,
+            "department": employee.department if employee else None
+        },
+
+        "leaveType": leave.leave_type,
+        "fromDate": leave.from_date,
+        "toDate": leave.to_date,
+        "totalDays": leave.total_leave_days,
+        "isHalfDay": bool(leave.half_day),
+
+        "leaveReason": leave.description,
+        "status": leave.status,
+        "appliedOn": leave.posting_date,
+
+        "approver": approver_data,
+        "rejectionReason": leave.custom_rejection_reason
+    }
+
+    return NAPSA_CLIENT_INSTANCE.send_response(
+        status="success",
+        message="Leave fetched successfully",
+        data=response,
+        status_code=200,
+        http_status=200
+    )
+
+
+
+
+@frappe.whitelist()
+def get_leaves_by_employee_id():
+    data = frappe.form_dict
+
+    employeeId = data.get("employeeId")
+    page = cint(data.get("page", 1))
+    page_size = cint(data.get("pageSize", 100))
+
+    if not employeeId:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employee ID is required",
+            status_code=400,
+            http_status=400
+        )
+
+    employee = frappe.db.get_value(
+        "Employee",
+        {"custom_id": employeeId},
+        ["name", "employee_name", "department"],
+        as_dict=True
+    )
+
+    if not employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employee not found",
+            status_code=404,
+            http_status=404
+        )
+
+    # Calculate offset
+    offset = (page - 1) * page_size
+
+    # Fetch data
+    leaves = frappe.get_all(
+        "Leave Application",
+        filters={"employee": employee.name},
+        fields=[
+            "name", "leave_type", "from_date", "to_date", 
+            "total_leave_days", "half_day", "description", 
+            "status", "posting_date", "custom_rejection_reason"
+        ],
+        order_by="posting_date desc",
+        limit_start=offset,
+        limit_page_length=page_size
+    )
+
+    # Pagination Logic
+    total_count = frappe.db.count("Leave Application", filters={"employee": employee.name})
+    total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
+    
+    # Generate pagination dictionary
+    pagination = {
+        "page": page,
+        "page_size": page_size,
+        "total": total_count,
+        "total_pages": total_pages,
+        "has_next": page < total_pages,
+        "has_prev": page > 1
+    }
+
+    leave_list = []
+    for leave in leaves:
+        leave_list.append({
+            "leaveId": leave.name,
+            "leaveType": leave.leave_type,
+            "fromDate": leave.from_date,
+            "toDate": leave.to_date,
+            "totalDays": leave.total_leave_days,
+            "isHalfDay": bool(leave.half_day),
+            "reason": leave.description,
+            "status": leave.status,
+            "appliedOn": leave.posting_date,
+            "rejectionReason": leave.custom_rejection_reason
+        })
+
+    response = {
+        "employee": {
+            "employeeId": employeeId,
+            "employeeName": employee.employee_name,
+            "department": employee.department
+        },
+        "pagination": pagination,
+        "leaves": leave_list
+    }
+
+    return NAPSA_CLIENT_INSTANCE.send_response(
+        status="success",
+        message="Leaves fetched successfully",
+        data=response,
+        status_code=200,
+        http_status=200
+    )

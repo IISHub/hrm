@@ -734,7 +734,7 @@ def cancel_leave():
         )
 
 
-@frappe.whitelist(allow_guest=False, methods=["PUT"])
+@frappe.whitelist(allow_guest=False, methods=["PATCH"])
 def update_leave_application():
     data = frappe.form_dict
 

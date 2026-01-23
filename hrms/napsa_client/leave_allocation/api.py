@@ -201,3 +201,91 @@ def get_leave_allocations_by_employee_id():
         status_code=200
     )
 
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET"])
+def get_all_leave_allocations():
+    args = frappe.local.form_dict
+
+    page = int(args.get("page", 1))
+    page_size = int(args.get("page_size", 10))
+    start = (page - 1) * page_size
+
+    if page < 1 or page_size < 1:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Invalid pagination parameters",
+            data=[],
+            status_code=400,
+            http_status=400
+        )
+
+    filters = {}
+    leave_type = args.get("leaveType")
+    employee_id = args.get("employeeId")
+
+    if employee_id:
+        employee = frappe.db.get_value("Employee", {"custom_id": employee_id}, "name")
+        if not employee:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Employee not found",
+                data=[],
+                status_code=404,
+                http_status=404
+            )
+        filters["employee"] = employee
+
+    if leave_type:
+        filters["leave_type"] = leave_type
+
+    total = frappe.db.count("Leave Allocation", filters=filters)
+
+    allocations = frappe.get_all(
+        "Leave Allocation",
+        filters=filters,
+        fields=[
+            "name",
+            "employee",
+            "leave_type",
+            "from_date",
+            "to_date",
+            "total_leaves_allocated",
+            "unused_leaves",
+            "creation"
+        ],
+        order_by="creation desc",
+        start=start,
+        page_length=page_size
+    )
+
+    formatted_allocations = [
+        {
+            "id": a.name,
+            "employeeNumber": a.employee,
+            "leaveType": a.leave_type,
+            "fromDate": a.from_date,
+            "toDate": a.to_date,
+            "totalLeavesAllocated": a.total_leaves_allocated,
+            "unusedLeaves": a.unused_leaves
+        }
+        for a in allocations
+    ]
+
+    return NAPSA_CLIENT_INSTANCE.send_response(
+        status="success",
+        message="Leave allocations fetched successfully",
+        data={
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": (total + page_size - 1) // page_size,
+                "has_next": start + page_size < total,
+                "has_prev": page > 1
+            },
+            "allocations": formatted_allocations
+        },
+        status_code=200
+    )
+

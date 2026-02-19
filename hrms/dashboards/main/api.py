@@ -13,12 +13,14 @@ def summary():
         active_count = frappe.db.count("Employee", {"status": "Active"})
         inactive_count = frappe.db.count("Employee", {"status": "Inactive"})
         on_leave_count = frappe.db.count("Employee", {"status": "On Leave"})
+        leave_types = frappe.get_all("Leave Type", fields=["name"])
 
         data = {
             "total": total_employees,
             "active": active_count,
             "inactive": inactive_count,
-            "onLeave": on_leave_count
+            "onLeave": on_leave_count,
+            "totalLeaveTypes": len(leave_types),
         }
 
         return NAPSA_CLIENT_INSTANCE.send_response(

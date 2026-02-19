@@ -278,7 +278,7 @@ def get_napsa_member_ssn(use_mock=False):
 
 
 @frappe.whitelist(methods=["POST"])
-def submit_napsa_member_single_return(use_mock=True):
+def submit_napsa_member_single_return(use_mock=False):
 
     year = frappe.form_dict.get("year")
     if not year:
@@ -379,15 +379,15 @@ def submit_napsa_member_single_return(use_mock=True):
             http_status=400,
             status_code=400
         )
-    otherName = frappe.form_dict.get("otherName")
-    if not otherName:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="otherName must not be null",
-            data=[],
-            http_status=400,
-            status_code=400
-        )
+    # otherName = frappe.form_dict.get("otherName")
+    # if not otherName:
+    #     return NAPSA_CLIENT_INSTANCE.send_response(
+    #         status="fail",
+    #         message="otherName must not be null",
+    #         data=[],
+    #         http_status=400,
+    #         status_code=400
+    #     )
 
     payload_fields = {
         "year": year,
@@ -395,9 +395,9 @@ def submit_napsa_member_single_return(use_mock=True):
         "ssn": ssn,
         "nrc": nrc,
         "surname": surname,
-        "otherName": otherName,
         "firstName": firstName,
         "dob": dob,
+        "otherName": "",
         "employeeGrossPay": employeeGrossPay,
         "employeeShare": employeeShare,
         "employerShare": employerShare,
@@ -408,14 +408,20 @@ def submit_napsa_member_single_return(use_mock=True):
         "employerAccountNumber": NAPSA_CLIENT_INSTANCE.get_employeer_account(),
         **payload_fields
     }
+    
+    print(json.dumps(payload, indent=4))
 
 
     if use_mock:
         mock_url = "http://0.0.0.0:9950/api/v1/returns/"
         try:
             res = requests.post(url=mock_url, json=payload, timeout=30)
+            print("Response text:", res.text)
             data = res.json()
             statusCode = data.get("statusCode")
+            
+            
+            
             if statusCode == "201":
                 
                 return NAPSA_CLIENT_INSTANCE.send_response(
@@ -466,6 +472,7 @@ def submit_napsa_member_single_return(use_mock=True):
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=50)
         data = res.json()
+        print("Check napsa response :", data)
 
         status_code = int(data.get("statusCode", res.status_code))
 
@@ -512,7 +519,7 @@ def submit_napsa_member_single_return(use_mock=True):
 
 
 @frappe.whitelist(methods=["GET"])
-def napsa_member_return_status(use_mock=True):
+def napsa_member_return_status(use_mock=False):
     return_reference = frappe.form_dict.get("returnReference")
 
     if not return_reference:

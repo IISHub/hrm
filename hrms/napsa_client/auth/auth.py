@@ -17,7 +17,7 @@ def save_new_token(token: str):
 
 
 @frappe.whitelist(allow_guest=False)
-def get_token(mock: bool = True):
+def get_token(mock: bool = False):
     try:
         if mock:
             random_token = uuid.uuid4()

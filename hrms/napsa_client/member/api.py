@@ -277,43 +277,178 @@ def get_napsa_member_ssn(use_mock=False):
 
 
 
-@frappe.whitelist()
-def submit_napsa_member_single_return():
+@frappe.whitelist(methods=["POST"])
+def submit_napsa_member_single_return(use_mock=False):
+
+    year = frappe.form_dict.get("year")
+    if not year:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Year is required",
+            data=[],
+            http_status=400,
+            status_code=400
+        )
+
+    month = frappe.form_dict.get("month")
+    if not month:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Month is required",
+            data=[],
+            http_status=400,
+            status_code=400
+        )
+
+    ssn = frappe.form_dict.get("ssn")
+    if not ssn:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="SSN is required",
+            data=[],
+            http_status=400,
+            status_code=400
+        )
+
+    nrc = frappe.form_dict.get("nrc")
+    if not nrc:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="NRC is required",
+            data=[],
+            http_status=400,
+            status_code=400
+        )
+
+    surname = frappe.form_dict.get("surname")
+    if not surname:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Surname is required",
+            data=[],
+            http_status=400,
+            status_code=400
+        )
+
+    firstName = frappe.form_dict.get("firstName")
+    if not firstName:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="First Name is required",
+            data=[],
+            http_status=400,
+            status_code=400
+        )
+
+    dob = frappe.form_dict.get("dob")
+    if not dob:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="DOB is required",
+            data=[],
+            http_status=400,
+            status_code=400
+        )
+
+    employeeGrossPay = frappe.form_dict.get("employeeGrossPay")
+    if not employeeGrossPay:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employee Gross Pay is required",
+            data=[],
+            http_status=400,
+            status_code=400
+        )
+
+    employeeShare = frappe.form_dict.get("employeeShare")
+    if not employeeShare:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employee Share is required",
+            data=[],
+            http_status=400,
+            status_code=400
+        )
+
+    employerShare = frappe.form_dict.get("employerShare")
+    if not employerShare:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employer Share is required",
+            data=[],
+            http_status=400,
+            status_code=400
+        )
+    # otherName = frappe.form_dict.get("otherName")
+    # if not otherName:
+    #     return NAPSA_CLIENT_INSTANCE.send_response(
+    #         status="fail",
+    #         message="otherName must not be null",
+    #         data=[],
+    #         http_status=400,
+    #         status_code=400
+    #     )
+
     payload_fields = {
-        "year": frappe.form_dict.get("year"),
-        "month": frappe.form_dict.get("month"),
-        "ssn": frappe.form_dict.get("ssn"),
-        "nrc": frappe.form_dict.get("nrc"),
-        "surname": frappe.form_dict.get("surname"),
-        "firstName": frappe.form_dict.get("firstName"),
-        "dob": frappe.form_dict.get("dob"),
-        "employeeGrossPay": frappe.form_dict.get("employeeGrossPay"),
-        "employerShare": frappe.form_dict.get("employerShare"),
-        "employeeShare": frappe.form_dict.get("employeeShare"),
+        "year": year,
+        "month": month,
+        "ssn": ssn,
+        "nrc": nrc,
+        "surname": surname,
+        "firstName": firstName,
+        "dob": dob,
+        "otherName": "",
+        "employeeGrossPay": employeeGrossPay,
+        "employeeShare": employeeShare,
+        "employerShare": employerShare,
     }
 
-    required_fields = {
-        "year": "Year is required",
-        "month": "Month is required",
-        "ssn": "SSN is required",
-        "nrc": "NRC is required",
-        "surname": "Surname is required",
-        "firstName": "First Name is required",
-        "dob": "DOB is required",
-        "employeeGrossPay": "Employee Gross Pay is required",
-        "employeeShare": "Employee Share is required",
-        "employerShare": "Employer Share is required",
+    payload = {
+        "returnReference": generate_numeric_id(),
+        "employerAccountNumber": NAPSA_CLIENT_INSTANCE.get_employeer_account(),
+        **payload_fields
     }
+    
+    print(json.dumps(payload, indent=4))
 
-    for field, error_message in required_fields.items():
-        if not payload_fields.get(field):
+
+    if use_mock:
+        mock_url = "http://0.0.0.0:9950/api/v1/returns/"
+        try:
+            res = requests.post(url=mock_url, json=payload, timeout=30)
+            print("Response text:", res.text)
+            data = res.json()
+            statusCode = data.get("statusCode")
+            
+            
+            
+            if statusCode == "201":
+                
+                return NAPSA_CLIENT_INSTANCE.send_response(
+                    status="success",
+                    message="Return received successfully",
+                    status_code=201,
+                    http_status=201,
+                    data={"returnReference": payload.get("returnReference")}
+                )
+        
+                
+            else:
+                return NAPSA_CLIENT_INSTANCE.send_response(
+                    status="fail",
+                    status_code=400,
+                    http_status=400,
+                    data=[],
+                    message=data.get("message")
+                )
+        
+        except Exception:
             return NAPSA_CLIENT_INSTANCE.send_response(
                 status="fail",
-                message=error_message,
-                status_code=400,
-                http_status=400
+                message="Mock server error",
+                status_code=500,
+                http_status=500
             )
-
 
     token = NAPSA_CLIENT_INSTANCE.get_saved_token()
     if not token:
@@ -329,12 +464,6 @@ def submit_napsa_member_single_return():
         "Content-Type": "application/json"
     }
 
-    payload = {
-        "returnReference": generate_numeric_id(),
-        "employerAccountNumber": NAPSA_CLIENT_INSTANCE.get_employeer_account(),
-        **payload_fields
-    }
-
     url = urljoin(
         NAPSA_BASE_URL,
         "icare-thirdparty-returns/employerReturn"
@@ -343,14 +472,14 @@ def submit_napsa_member_single_return():
     try:
         res = requests.post(url, headers=headers, json=payload, timeout=50)
         data = res.json()
-        print("NAPSA Submit Return Response:", data)
+        print("Check napsa response :", data)
 
         status_code = int(data.get("statusCode", res.status_code))
 
         if status_code != 200:
             return NAPSA_CLIENT_INSTANCE.send_response(
                 status="fail",
-                message=data.get("errors"),
+                message=data.get("errors") or "Submission failed",
                 status_code=status_code,
                 http_status=status_code
             )
@@ -389,8 +518,8 @@ def submit_napsa_member_single_return():
 
 
 
-@frappe.whitelist()
-def napsa_member_return_status():
+@frappe.whitelist(methods=["GET"])
+def napsa_member_return_status(use_mock=False):
     return_reference = frappe.form_dict.get("returnReference")
 
     if not return_reference:
@@ -400,6 +529,32 @@ def napsa_member_return_status():
             status_code=400,
             http_status=400
         )
+        
+        
+    if use_mock:
+        url = f"http://0.0.0.0:9950/api/v1/returns/by-reference/?reference={return_reference}"
+        res = requests.get(url=url, timeout=50)
+        data = res.json()
+        statusCode = data.get("statusCode")
+        if statusCode == "200":
+            
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="success",
+                message="Return received successfully",
+                status_code=202,
+                http_status=202,
+            )
+    
+            
+        else:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                status_code=400,
+                http_status=400,
+                data=[],
+                message=data.get("message")
+            )
+        
 
     try:
         token = NAPSA_CLIENT_INSTANCE.get_saved_token()
@@ -632,8 +787,8 @@ def submit_napsa_member_topup():
 
 
 
-@frappe.whitelist()
-def submit_napsa_member_bulk_return():
+@frappe.whitelist(methods=["POST"])
+def submit_napsa_member_bulk_return(use_mock=True):
     returns_raw = frappe.form_dict.get("returns")
 
     if not returns_raw:
@@ -661,6 +816,36 @@ def submit_napsa_member_bulk_return():
             status_code=400,
             http_status=400
         )
+    if use_mock:
+        payload = {
+            "returnReference": generate_numeric_id(),
+            "requestCallBackUrl": "http://localhost:9951/icare-thirdparty/callback-test",
+            "returns": returns_list
+        }
+        url = "http://0.0.0.0:9950/api/v1/returns/bulky"
+        res = requests.post(url=url, json=payload, timeout=30)
+        res.raise_for_status()
+        data = res.json()
+        statusCode = data.get("statusCode")
+        if statusCode == "202":
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="success",
+                message="Returns are being processed. You will receive the response through a callback request or you can query the status",
+                status_code=202,
+                data={"returnReference": payload.get("returnReference")},
+                http_status=202,
+            )
+    
+            
+        else:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                status_code=400,
+                http_status=400,
+                data=[],
+                message=data.get("message")
+            )
+        
     token = NAPSA_CLIENT_INSTANCE.get_saved_token()
     if not token:
         return NAPSA_CLIENT_INSTANCE.send_response(

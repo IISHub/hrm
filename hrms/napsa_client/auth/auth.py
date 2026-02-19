@@ -45,7 +45,7 @@ def get_token(mock: bool = False):
             "scope": "*"
         }
 
-        response = requests.post(url, json=payload, headers=headers, timeout=15)
+        response = requests.post(url, json=payload, headers=headers, timeout=40)
         response.raise_for_status()
 
         data = response.json()

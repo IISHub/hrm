@@ -183,15 +183,16 @@ def create_employee():
             status_code=400,
             http_status=400
         )
-        
-    existing_employee = frappe.db.get_value("Employee", {"custom_alternate_phone": AlternatePhone}, "name")
-    if existing_employee:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message=f"Alternate Phone {AlternatePhone} already exists.",
-            status_code=400,
-            http_status=400
-        )
+    
+    if AlternatePhone:
+        existing_employee = frappe.db.get_value("Employee", {"custom_alternate_phone": AlternatePhone}, "name")
+        if existing_employee:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=f"Alternate Phone {AlternatePhone} already exists.",
+                status_code=400,
+                http_status=400
+            )
         
     existing_employee = frappe.db.get_value("Employee", {"custom_tax_payer_indentification_number": TpinId}, "name")
     if existing_employee:
@@ -704,7 +705,8 @@ def get_employee():
                 "AccountType": employee.custom_bank_account_type
             }
         },
-        "documents": doc_list
+        "documents": doc_list,
+        "ProfilePicture": employee.image
     }
 
     return NAPSA_CLIENT_INSTANCE.send_response(
@@ -1157,3 +1159,60 @@ def manage_employee_documents():
         status_code=200,
         http_status=200
     )
+
+
+
+
+@frappe.whitelist(allow_guest=False, methods=["PATCH"])
+def update_employee_profile_photo():
+    data = frappe.form_dict
+    employeeId = data.get("employeeId")
+    file = frappe.local.request.files.get("profilePhoto")
+    
+    if not employeeId:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employee ID is required",
+            status_code=400,
+            http_status=400
+        )
+        
+    if not file:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Profile photo file is required",
+            status_code=400,
+            http_status=400
+        )
+        
+    employee_name = frappe.db.get_value(
+        "Employee",
+        {"custom_id": employeeId},
+        "name"
+    )
+
+    print("Employee Name:", employee_name)
+    if not employee_name:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employee not found",
+            status_code=404,
+            http_status=404
+        )
+
+    employee = frappe.get_doc("Employee", employee_name)    
+    saved_file_url = save_file(file, site_name="erpnext.localhost", folder_type="EMPLOYEE_PROFILE_PHOTO")
+
+    print("Saved File URL:", saved_file_url)
+    employee.image = saved_file_url
+    employee.save()
+    frappe.db.commit()
+
+    return NAPSA_CLIENT_INSTANCE.send_response(
+        status="success",
+        message="Employee profile photo updated successfully",
+        status_code=200,
+        http_status=200
+    )
+    
+    

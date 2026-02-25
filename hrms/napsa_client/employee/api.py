@@ -460,7 +460,6 @@ def get_all_employees(page=None, page_size=None):
             ["Employee", "last_name", "like", f"%{name}%"]
         ]
 
-    # ===== Total Count =====
     if name:
         total_employees = len(
             frappe.get_all(
@@ -473,7 +472,6 @@ def get_all_employees(page=None, page_size=None):
     else:
         total_employees = frappe.db.count("Employee", filters=filters)
 
-    # ===== Fetch Employees =====
     employees = frappe.get_all(
         "Employee",
         fields=[
@@ -485,6 +483,7 @@ def get_all_employees(page=None, page_size=None):
             "custom_jobtitle",
             "department",
             "custom_work_location",
+            "custom_gross_salary",
             "status"
         ],
         filters=filters,
@@ -515,6 +514,7 @@ def get_all_employees(page=None, page_size=None):
             "jobTitle": emp.custom_jobtitle,
             "department": department_label,
             "workLocation": emp.custom_work_location,
+            "grossSalary": emp.custom_gross_salary,
             "status": emp.status
         })
 

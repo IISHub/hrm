@@ -128,7 +128,7 @@ def create_employee():
     GrossSalary = data.get("GrossSalary")
     Nationality = data.get("Nationality")
     SalaryStructure = data.get("SalaryStructure")
-    BasicAmount = data.get("BasicAmount")
+    GrossAmount = data.get("GrossAmount")
     status = data.get("status")
     
     if not FirstName:
@@ -285,13 +285,15 @@ def create_employee():
                 http_status=400
             )
             
-    if not BasicAmount:
+    if not GrossAmount:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status = "fail",
-            message = "Basic amount must not be null",
+            message = "Gross Amount must not be null",
             status_code = 400,
             http_status= 400,
         )
+        
+    BasicAmount = NAPSA_CLIENT_INSTANCE.CalculateBasicBasedOnGrosssPay(GrossAmount)
 
 
 

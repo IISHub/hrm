@@ -65,6 +65,11 @@ class NapsaClient():
     
     def getAllAllowedLeaveTypes(self):
         leaves = frappe.get_all("Leave Type", pluck="name")
-        print("**** allowed leaves ****", leaves)
         return leaves
+    
+    def CalculateBasicBasedOnGrosssPay(self, grossPay):
+        basicPay = grossPay / 1.4
+        return basicPay
+    
+    
     

@@ -1301,3 +1301,59 @@ def update_employee_profile_photo():
     )
     
     
+    
+@frappe.whitelist(allow_guest=False, methods=["POST"])
+def validate_employee():
+
+    nrc = (frappe.form_dict.get("NrcId") or "").strip()
+    tpin = (frappe.form_dict.get("TpinId") or "").strip()
+    nhima = (frappe.form_dict.get("NhimaHealthInsurance") or "").strip()
+    napsa = (frappe.form_dict.get("SocialSecurityNapsa") or "").strip()
+    
+    
+    if not all([nrc, tpin, nhima, napsa]):
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="NrcId, TpinId, NhimaHealthInsurance and SocialSecurityNapsa are all required",
+            status_code=400,
+            http_status=400,
+            data={}
+        )
+
+        
+
+    errors = {}
+
+    if nrc:
+        if frappe.db.exists("Employee", {"custom_national_registration_number": nrc}):
+            errors["nrc"] = "NRC already exists"
+
+    if tpin:
+        if frappe.db.exists("Employee", {"custom_tax_payer_indentification_number": tpin}):
+            errors["tpin"] = "TPIN already exists"
+
+
+    if nhima:
+        if frappe.db.exists("Employee", {"custom_nhima_health_insurance_number": nhima}):
+            errors["nhima"] = "NHIMA number already exists"
+
+    if napsa:
+        if frappe.db.exists("Employee", {"custom_social_security_number": napsa}):
+            errors["napsa"] = "NAPSA number already exists"
+
+    if errors:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Validation failed",
+            data=errors,
+            status_code=400,
+            http_status=400
+        )
+
+    return NAPSA_CLIENT_INSTANCE.send_response(
+        status="success",
+        message="Identifiers are valid",
+        status_code=200,
+        http_status=200,
+        data={}
+    )

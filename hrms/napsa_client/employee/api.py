@@ -127,6 +127,8 @@ def create_employee():
     otherAllowances = data.get("otherAllowances")
     GrossSalary = data.get("GrossSalary")
     Nationality = data.get("Nationality")
+    SalaryStructure = data.get("SalaryStructure")
+    BasicAmount = data.get("BasicAmount")
     status = data.get("status")
     
     if not FirstName:
@@ -269,6 +271,27 @@ def create_employee():
             http_status=400
         )
 
+    
+    if not SalaryStructure:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Salary Structure is required", status_code=400, http_status=400)
+    
+    
+    if SalaryStructure:
+        if not frappe.db.exists("Salary Structure", SalaryStructure):
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=f"Salary Structure '{SalaryStructure}' does not exist.",
+                status_code=400,
+                http_status=400
+            )
+            
+    if not BasicAmount:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status = "fail",
+            message = "Basic amount must not be null",
+            status_code = 400,
+            http_status= 400,
+        )
 
 
 
@@ -342,8 +365,8 @@ def create_employee():
         "last_name": LastName,
         "middle_name": OtherNames,
         "gender": Gender,
-        "date_of_birth": Dob,
-        "date_of_joining": EngagementDate,
+        "date_of_birth": "1964-01-01",
+        "date_of_joining": "1964-01-01",
         "personal_email": Email,
         "company_email": CompanyEmail,
         "cell_number": PhoneNumber,
@@ -399,18 +422,31 @@ def create_employee():
         "custom_cv": CV_DOCUMENT_URL,
         "custom_educationcertificates": CV_EDUCERT_URL,
         "custom_policereport": POLICE_REPORT_DOC_URL,
+        "custom_dob": Dob,
+        "custom_doj": EngagementDate,
         "status": status,
     })
 
     employee.insert(ignore_permissions=True)
     frappe.db.commit()
+    
+    salaryStructureAssignment = frappe.get_doc({
+        "doctype": "Salary Structure Assignment",
+        "employee": employee.name,
+        "salary_structure": SalaryStructure,
+        "base":   BasicAmount,
+        "from_date": "1964-01-01"
+    })
+
+    salaryStructureAssignment.insert(ignore_permissions=True)
+    salaryStructureAssignment.submit()
+
+    frappe.db.commit()
 
     return NAPSA_CLIENT_INSTANCE.send_response(
-        status="sucesss", 
+        status="success", 
         message="Employee added successfully", 
-        data={
-                "id": employee_id
-            }, 
+        data=[],
         status_code=201, 
         http_status=201
     )
@@ -484,6 +520,7 @@ def get_all_employees(page=None, page_size=None):
             "department",
             "custom_work_location",
             "custom_gross_salary",
+            "image",
             "status"
         ],
         filters=filters,
@@ -515,7 +552,8 @@ def get_all_employees(page=None, page_size=None):
             "department": department_label,
             "workLocation": emp.custom_work_location,
             "grossSalary": emp.custom_gross_salary,
-            "status": emp.status
+            "status": emp.status,
+            "ProfilePicture": emp.image
         })
 
     # ===== Summary =====
@@ -539,7 +577,6 @@ def get_all_employees(page=None, page_size=None):
         WHERE status IS NOT NULL
     """, pluck=True)
 
-    # ===== Pagination (FIXED FORMAT) =====
     total_pages = math.ceil(total_employees / page_size) if page_size else 0
 
     pagination = {
@@ -601,12 +638,61 @@ def get_employee():
     documents = frappe.get_all(
         "HR Documents",
         filters={
-            "parent_id": employee.custom_id,  # Use parent_id to link employee
+            "parent_id": employee.custom_id, 
         },
         fields=["id", "description", "file"]
     )
+    assignment = frappe.db.get_value(
+        "Salary Structure Assignment",
+        {"employee": employee.name},
+        ["name", "base"],
+        as_dict=True
+    )
 
-    # Format documents as list of dicts
+    transportAllowance = 0
+    housingAllowance = 0
+    grossPay = 0
+    PayAsYouEarn = 0
+    EmployeeNapsa = 0
+    EmployeerNapsa = 0
+    EmployeeNhima = 0
+    EmployeerNhima = 0
+
+    existing_assignment = assignment.name if assignment else None
+    base = assignment.base if assignment else 0
+
+
+    transportAllowance = base * 0.10
+    housingAllowance = base * 0.30
+
+    pensionable_earnings = base + housingAllowance + transportAllowance
+
+    if pensionable_earnings >= 37236:
+        EmployeeNapsa = 1861.8
+    else:
+        EmployeeNapsa = pensionable_earnings * 0.05
+
+    EmployeerNapsa = EmployeeNapsa  
+
+
+    EmployeeNhima = base * 0.01
+    EmployeerNhima = base * 0.01
+    grossPay = pensionable_earnings
+
+
+    if grossPay <= 5100:
+        PayAsYouEarn = 0
+    elif grossPay <= 7100:
+        PayAsYouEarn = (grossPay - 5100) * 0.20
+    elif grossPay <= 9200:
+        PayAsYouEarn = (2000 * 0.20) + (grossPay - 7100) * 0.30
+    else:
+        PayAsYouEarn = (2000 * 0.20) + (2100 * 0.30) + (grossPay - 9200) * 0.37
+
+
+        
+
+
     doc_list = []
     for doc in documents:
         doc_list.append({
@@ -615,7 +701,6 @@ def get_employee():
             "file": doc.get("file")
         })
 
-    # If no documents, return an empty list
     if not doc_list:
         doc_list = []
 
@@ -635,7 +720,7 @@ def get_employee():
             "FirstName": employee.first_name,
             "OtherNames": employee.middle_name,
             "LastName": employee.last_name,
-            "Dob": str(employee.date_of_birth),
+            "Dob": str(employee.custom_dob),
             "Gender": employee.gender,
             "Nationality": employee.custom_nationality,
             "maritalStatus": employee.marital_status
@@ -663,7 +748,7 @@ def get_employee():
             "JobTitle": getattr(employee, "custom_jobtitle", None),
             "reportingManager": employee.reports_to,
             "EmployeeType": getattr(employee, "custom_employeetype", None),
-            "joiningDate": str(employee.date_of_joining),
+            "joiningDate": str(employee.custom_doj),
             "probationPeriod": getattr(employee, "custom_probation_period", None),
             "contractEndDate": str(employee.contract_end_date) if employee.contract_end_date else None,
             "workLocation": employee.custom_work_location,
@@ -680,22 +765,22 @@ def get_employee():
             }
         },
         "payrollInfo": {
-            "grossSalary": employee.custom_gross_salary,
+            "grossSalary": grossPay,
             "currency": employee.salary_currency,
             "paymentFrequency": getattr(employee, "custom_payment_frequency", None),
             "paymentMethod": employee.custom_payment_method,
             "salaryBreakdown": {
-                "BasicSalary": employee.custom_basic_salary,
-                "HousingAllowance": employee.custom_housing_allowance,
-                "TransportAllowance": employee.custom_transport_allowance,
-                "MealAllowance": employee.custom_meal_allowance,
-                "otherAllowances": employee.custom_otherallowances
+                "BasicSalary": base,
+                "HousingAllowance": housingAllowance,
+                "TransportAllowance": transportAllowance,
+
             },
             "statutoryDeductions": {
-                "napsaEmployeeRate": getattr(employee, "custom_napsa_employee_rate", 5),
-                "napsaEmployerRate": getattr(employee, "custom_napsa_employer_rate", 5),
-                "nhimaRate": getattr(employee, "custom_nhima_rate", 2),
-                "payeAmount": getattr(employee, "custom_paye_amount", 0)
+                "EmployeeNapsa": EmployeeNapsa,
+                "EmployeerNapsa": EmployeerNapsa,
+                "EmployeeNhima": EmployeeNhima,
+                "EmployeerNhima": EmployeerNhima,
+                "PayAsYouEarn": PayAsYouEarn
             },
             "bankAccount": {
                 "AccountNumber": employee.bank_ac_no,

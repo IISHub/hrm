@@ -71,5 +71,36 @@ class NapsaClient():
         basicPay = grossPay / 1.4
         return basicPay
     
+    def CalculateSalaryFromBasic(self, base):
+        base = float(base or 0)
+
+        transport = base * 0.10
+        housing = base * 0.30
+
+        gross = base + transport + housing
+        return gross
     
+    def GetPaymentTypes(self):
+        return ["Cash", "Mobile Money", "Bank Transfer"]
     
+    def GetPaymentValidations(self, data):
+        return {
+            "Cash": [
+                (data.get("PaymentCashPersonFullName"), "Cash person full name"),
+                (data.get("PaymentCashPersonId"), "Cash person ID"),
+            ],
+            "Mobile Money": [
+                (data.get("PaymentMobileMoneyFullName"), "Mobile money full name"),
+                (data.get("PaymentMobileMoneyPhone"), "Mobile money phone"),
+                (data.get("PaymentMobileMoneyMnoType"), "Mobile money MNO type"),
+            ],
+            "Bank Transfer": [
+                (data.get("AccountName"), "Account name"),
+                (data.get("AccountNumber"), "Account number"),
+                (data.get("BankName"), "Bank name"),
+            ],
+        }
+        
+        
+    def GetStaticDate(self):
+        return "1964-01-01"

@@ -3,7 +3,6 @@ import frappe
 
 NAPSA_CLIENT_INSTANCE = NapsaClient()
 
-company = frappe.conf.default_company
 from hrms.napsa_client.main import NapsaClient
 import frappe
 

@@ -83,12 +83,17 @@ def create_employee():
     AlternatePhone = data.get("AlternatePhone")
     JobTitle = data.get("JobTitle")
     EmployeeType = data.get("EmployeeType")
+    PaymentMethod = data.get("PaymentMethod")
     AccountType = data.get("AccountType")
     BankName = data.get("BankName")
     AccountName = data.get("AccountName")
     AccountNumber = data.get("AccountNumber")
     BranchCode = data.get("BranchCode")
-    PaymentMethod = data.get("PaymentMethod")
+    PaymentCashFullname = data.get("PaymentCashPersonFullName")
+    PaymentCashId = data.get("PaymentCashPersonId")
+    PaymentMobileFullname = data.get("PaymentMobileMoneyFullName")
+    PaymentMobilePhone = data.get("PaymentMobileMoneyPhone")
+    PaymentMobileMno = data.get("PaymentMobileMoneyMnoType")
     SocialSecurityNapsa = data.get("SocialSecurityNapsa")
     NhimaHealthInsurance = data.get("NhimaHealthInsurance")
     NrcId = data.get("NrcId")
@@ -234,15 +239,16 @@ def create_employee():
         )
         
     
-    existing_employee = frappe.db.get_value("Employee", {"bank_ac_no": AccountNumber}, "name")
-    if existing_employee:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message=f"Bank Account {AccountNumber} already exists.",
-            status_code=400,
-            http_status=400
-        )
-        
+    if AccountNumber:
+        existing_employee = frappe.db.get_value("Employee", {"bank_ac_no": AccountNumber}, "name")
+        if existing_employee:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=f"Bank Account {AccountNumber} already exists.",
+                status_code=400,
+                http_status=400
+            )
+            
     if reportingManager:
         if not frappe.db.exists("Employee", {"name": reportingManager}):
             return NAPSA_CLIENT_INSTANCE.send_response(
@@ -294,8 +300,76 @@ def create_employee():
         )
         
     BasicAmount = NAPSA_CLIENT_INSTANCE.CalculateBasicBasedOnGrosssPay(GrossAmount)
+    
+    availableTypeMethods = NAPSA_CLIENT_INSTANCE.GetPaymentTypes()
 
+    if not PaymentMethod or PaymentMethod not in availableTypeMethods:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Invalid payment method. Allowed values: {', '.join(availableTypeMethods)}",
+            status_code=400,
+            http_status=400,
+        )
 
+    validations = NAPSA_CLIENT_INSTANCE.GetPaymentValidations(data).get(PaymentMethod, [])
+    for value, label in validations:
+        if not value:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=f"{label} is required for payment method '{PaymentMethod}'",
+                status_code=400,
+                http_status=400
+            )
+            
+    
+    errors = []
+
+    if PaymentMethod == "Cash":
+        if not data.get("PaymentCashPersonFullName"):
+            errors.append("Cash person full name is required for Cash payments.")
+        if not data.get("PaymentCashPersonId"):
+            errors.append("Cash person ID is required for Cash payments.")
+        if AccountNumber or data.get("BankName"):
+            errors.append("Cash payment cannot have bank account details.")
+        if data.get("PaymentMobileMoneyPhone"):
+            errors.append("Cash payment cannot have mobile money details.")
+
+    elif PaymentMethod == "Mobile Money":
+        if not data.get("PaymentMobileMoneyFullName"):
+            errors.append("Mobile money full name is required.")
+        if not data.get("PaymentMobileMoneyPhone"):
+            errors.append("Mobile money phone is required.")
+        if not data.get("PaymentMobileMoneyMnoType"):
+            errors.append("Mobile money MNO type is required.")
+        # Mobile Money should NOT have cash or bank info
+        if data.get("PaymentCashPersonFullName") or data.get("PaymentCashPersonId"):
+            errors.append("Mobile Money payment cannot have cash person details.")
+        if AccountNumber or data.get("BankName"):
+            errors.append("Mobile Money payment cannot have bank account details.")
+
+    elif PaymentMethod == "Bank Transfer":
+        if not data.get("AccountName"):
+            errors.append("Account name is required for Bank Transfer.")
+        if not AccountNumber:
+            errors.append("Account number is required for Bank Transfer.")
+        if not data.get("BankName"):
+            errors.append("Bank name is required for Bank Transfer.")
+            
+        if data.get("PaymentCashPersonFullName") or data.get("PaymentCashPersonId"):
+            errors.append("Bank Transfer cannot have cash person details.")
+        if data.get("PaymentMobileMoneyPhone"):
+            errors.append("Bank Transfer cannot have mobile money details.")
+
+    else:
+        errors.append("Invalid PaymentType. Must be Cash, Mobile Money, or Bank Transfer.")
+
+    if errors:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=", ".join(errors),
+            status_code=400,
+            http_status=400
+        )
 
     shift_name = shift 
     shift_id = None
@@ -360,6 +434,7 @@ def create_employee():
     POLICE_REPORT_DOC_URL = save_file(POLICE_REPORT_DOC, site_name="erpnext.localhost", folder_type="POLICE_REPORT_DOC")
 
     employee_id = generate_employee_id()
+    date = NAPSA_CLIENT_INSTANCE.GetStaticDate()
     employee = frappe.get_doc({
         "doctype": "Employee",
         "custom_id": employee_id,
@@ -367,8 +442,8 @@ def create_employee():
         "last_name": LastName,
         "middle_name": OtherNames,
         "gender": Gender,
-        "date_of_birth": "1964-01-01",
-        "date_of_joining": "1964-01-01",
+        "date_of_birth": date,
+        "date_of_joining": date,
         "personal_email": Email,
         "company_email": CompanyEmail,
         "cell_number": PhoneNumber,
@@ -426,6 +501,11 @@ def create_employee():
         "custom_policereport": POLICE_REPORT_DOC_URL,
         "custom_dob": Dob,
         "custom_doj": EngagementDate,
+        "custom_payment_cash_full_name_": PaymentCashFullname,
+        "custom_payment_cash_id": PaymentCashId,
+        "custom_payment_mobile_full_name": PaymentMobileFullname,
+        "custom_payment_mobile_phone": PaymentMobilePhone,
+        "custom_payment_mobile_mno":  PaymentMobileMno,
         "status": status,
     })
 
@@ -452,6 +532,7 @@ def create_employee():
         status_code=201, 
         http_status=201
     )
+
 
 @frappe.whitelist(allow_guest=True)
 def get_all_employees(page=None, page_size=None):
@@ -513,17 +594,16 @@ def get_all_employees(page=None, page_size=None):
     employees = frappe.get_all(
         "Employee",
         fields=[
+            "name",
             "custom_id",
             "first_name",
             "middle_name",
             "last_name",
-            "name",
             "custom_jobtitle",
             "department",
             "custom_work_location",
-            "custom_gross_salary",
-            "image",
-            "status"
+            "status",
+            "image"
         ],
         filters=filters,
         or_filters=name_filters if name else None,
@@ -533,6 +613,7 @@ def get_all_employees(page=None, page_size=None):
     )
 
     data = []
+
     for emp in employees:
         full_name = " ".join(filter(None, [
             emp.first_name,
@@ -546,6 +627,17 @@ def get_all_employees(page=None, page_size=None):
             "department_name"
         ) or ""
 
+        assignment = frappe.db.get_value(
+            "Salary Structure Assignment",
+            {"employee": emp.name},
+            ["base"],
+            as_dict=True
+        )
+
+        base = float(assignment.base) if assignment and assignment.base else 0
+
+        salary =  NAPSA_CLIENT_INSTANCE.CalculateSalaryFromBasic(base)
+
         data.append({
             "id": emp.custom_id,
             "employeeId": emp.name,
@@ -553,12 +645,11 @@ def get_all_employees(page=None, page_size=None):
             "jobTitle": emp.custom_jobtitle,
             "department": department_label,
             "workLocation": emp.custom_work_location,
-            "grossSalary": emp.custom_gross_salary,
+            "grossSalary": salary,  
             "status": emp.status,
-            "ProfilePicture": emp.image
+            "profilePicture": emp.image
         })
 
-    # ===== Summary =====
     summary = {
         "totalEmployees": total_employees,
         "active": frappe.db.count("Employee", {**filters, "status": "Active"}),
@@ -566,7 +657,6 @@ def get_all_employees(page=None, page_size=None):
         "inactive": frappe.db.count("Employee", {**filters, "status": "Inactive"})
     }
 
-    # ===== Meta =====
     locations = frappe.db.sql("""
         SELECT DISTINCT custom_work_location
         FROM tabEmployee
@@ -790,7 +880,18 @@ def get_employee():
                 "BankName": employee.bank_name,
                 "branchCode": employee.custom_bank_branch_code,
                 "AccountType": employee.custom_bank_account_type
+            },
+            "Cash": {
+                "PaymentCashPersonFullName": employee.custom_payment_cash_full_name_,
+                "PaymentCashPersonId": employee.custom_payment_cash_id,
+            },
+            "MobileMoney": {
+                "PaymentMobileMoneyFullName": employee.custom_payment_mobile_full_name,
+                "PaymentMobileMoneyPhone": employee.custom_payment_mobile_phone,
+                "PaymentMobileMoneyMnoType": employee.custom_payment_mobile_mno,
+                
             }
+        
         },
         "documents": doc_list,
         "ProfilePicture": employee.image

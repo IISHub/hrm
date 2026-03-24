@@ -932,10 +932,11 @@ def update_employee():
             status_code=404,
             http_status=404
         )
-
+        
+    
 
     employee = frappe.get_doc("Employee", employee_name)
-    EngagementDate = data.get("EngagementDate")
+    EngagementDate = NAPSA_CLIENT_INSTANCE.GetStaticDate()
     Email = data.get("Email")
     CompanyEmail = data.get("CompanyEmail")
     MaritalStatus = data.get("MaritalStatus")
@@ -985,9 +986,10 @@ def update_employee():
     MealAllowance = data.get("MealAllowance")
     TransportAllowance = data.get("TransportAllowance")
     otherAllowances = data.get("otherAllowances")
-    GrossSalary = data.get("GrossSalary")
     Nationality = data.get("Nationality")
     status = data.get("status")
+    SalaryStructure = data.get("SalaryStructure")
+    GrossAmount = data.get("GrossAmount")
 
     if reportingManager:
         if not frappe.db.exists("Employee", {"name": reportingManager}):
@@ -1120,7 +1122,7 @@ def update_employee():
         "custom_transport_allowance": TransportAllowance,
         "custom_otherallowances": otherAllowances,
         "custom_meal_allowance": MealAllowance,
-        "custom_gross_salary": GrossSalary,
+        "custom_gross_salary": GrossAmount,
         "custom_nationality": Nationality,
         "status": status,
     }
@@ -1144,6 +1146,73 @@ def update_employee():
 
     employee.save(ignore_permissions=True)
     frappe.db.commit()
+    
+    if SalaryStructure or GrossAmount:
+        BasicAmount = NAPSA_CLIENT_INSTANCE.CalculateBasicBasedOnGrosssPay(GrossAmount)
+        assignment_name = frappe.db.get_value("Salary Structure Assignment", {"employee": employee.name}, "name")
+        try:
+            if assignment_name:
+                assignment = frappe.get_doc("Salary Structure Assignment", assignment_name)
+                if assignment.docstatus == 1:
+                    assignment.cancel()
+                    frappe.db.commit()
+                    frappe.delete_doc("Salary Structure Assignment", assignment_name, force=True)
+                    frappe.db.commit()
+
+                    new_assignment = frappe.get_doc({
+                        "doctype": "Salary Structure Assignment",
+                        "employee": employee.name,
+                        "salary_structure": SalaryStructure or assignment.salary_structure,
+                        "base": BasicAmount or assignment.base,
+                        "from_date":  NAPSA_CLIENT_INSTANCE.GetStaticDate(),
+                        "company": assignment.company
+                    })
+                    new_assignment.insert()
+                    new_assignment.submit()
+                    frappe.db.commit()
+                else:
+
+                    if SalaryStructure:
+                        if not frappe.db.exists("Salary Structure", SalaryStructure):
+                            return NAPSA_CLIENT_INSTANCE.send_response(
+                                status="fail",
+                                message=f"Salary Structure '{SalaryStructure}' does not exist.",
+                                status_code=404,
+                                http_status=404
+                            )
+                        assignment.salary_structure = SalaryStructure
+                    if BasicAmount is not None:
+                        assignment.base = BasicAmount
+                    assignment.save(ignore_permissions=True)
+                    frappe.db.commit()
+            else:
+                if not SalaryStructure:
+                    return NAPSA_CLIENT_INSTANCE.send_response(
+                        status="fail",
+                        message="Salary Structure is required to create a new assignment",
+                        status_code=400,
+                        http_status=400
+                    )
+                new_assignment = frappe.get_doc({
+                    "doctype": "Salary Structure Assignment",
+                    "employee": employee.name,
+                    "salary_structure": SalaryStructure,
+                    "base": BasicSalary,
+                    "from_date": NAPSA_CLIENT_INSTANCE.GetStaticDate(),
+                    "company": employee.company
+                })
+                new_assignment.insert()
+                new_assignment.submit()
+                frappe.db.commit()
+
+        except Exception as e:
+            frappe.log_error(frappe.get_traceback(), "Update Salary/Base Error")
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=f"Error updating Salary Structure or Base: {str(e)}",
+                status_code=500,
+                http_status=500
+            )
 
     return NAPSA_CLIENT_INSTANCE.send_response(
         status="success",

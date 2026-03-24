@@ -1,4 +1,8 @@
+from frappe.utils import get_site_path
 import frappe
+import os
+
+
 
 EMPLOYER_ACCOUNT_NUMBER = "5205098"
 class NapsaClient():
@@ -104,3 +108,62 @@ class NapsaClient():
         
     def GetStaticDate(self):
         return "1964-01-01"
+    
+    def GetDefaultShiftStart(self):
+        return "09:00:00"
+    
+    def GetDefaultShiftEnd(self):
+        return "17:00:00"
+    
+    
+    def GetCompanyId(self):
+        companyId = frappe.conf.default_company_id
+
+        if not companyId:
+            return self.send_response(
+                status="fail",
+                message="Default Company ID is not set in config",
+                status_code=400,
+                http_status=400
+            )
+
+        return companyId
+    
+    def GetDefaultSiteName(self):
+        site_name = frappe.conf.default_site_name
+        if not site_name:
+            return self.send_response(
+                status="fail",
+                message="Default site name is not set",
+                status_code=400,
+                http_status=400
+            )
+
+        return site_name
+    
+    def GetCompany(self):
+        return frappe.get_doc(
+            "Company",
+            {"custom_company_id":  self.GetCompanyId()}
+        )
+    
+    def GetCompanyLogoPath(self):
+        return frappe.db.get_value(
+            "Company",
+            {"custom_company_id": self.GetCompanyId()},
+            "company_logo"
+        ) or ""
+        
+    def GetLogoFullPath(self):
+        path = self.GetCompanyLogoPath()
+
+        if not path:
+            return None
+
+        return os.path.join(
+            get_site_path("public"),
+            path.replace("/files/", "files/")
+        )
+    
+    def GetLoggedInUser(self):
+        return frappe.session.user

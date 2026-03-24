@@ -11,9 +11,6 @@ import math
 
 NAPSA_CLIENT_INSTANCE = NapsaClient()
 
-import frappe
-from frappe import _
-
 def generate_employee_id():
     last_id = frappe.db.sql("""
         SELECT custom_id
@@ -66,7 +63,7 @@ def validate_unique_employee_fields(data, employee_name=None):
 
 
 
-@frappe.whitelist()
+@frappe.whitelist(allow_guest=False, methods=["POST"])
 def create_employee():
     data = frappe.form_dict
     print("Data: ", data)
@@ -341,7 +338,7 @@ def create_employee():
             errors.append("Mobile money phone is required.")
         if not data.get("PaymentMobileMoneyMnoType"):
             errors.append("Mobile money MNO type is required.")
-        # Mobile Money should NOT have cash or bank info
+            
         if data.get("PaymentCashPersonFullName") or data.get("PaymentCashPersonId"):
             errors.append("Mobile Money payment cannot have cash person details.")
         if AccountNumber or data.get("BankName"):
@@ -385,12 +382,13 @@ def create_employee():
             shift_doc = frappe.get_doc({
                 "doctype": "Shift Type",
                 "name": shift_name,
-                "start_time": "09:00:00",
-                "end_time": "17:00:00",
+                "start_time": NAPSA_CLIENT_INSTANCE.GetDefaultShiftStart(),
+                "end_time":  NAPSA_CLIENT_INSTANCE.GetDefaultShiftEnd(),
                 "enable_auto_attendance": 0
             })
             shift_doc.insert(ignore_permissions=True)
             shift_id = shift_doc.name
+            
     department_id = None
 
     if department_label:
@@ -404,7 +402,7 @@ def create_employee():
             dept = frappe.get_doc({
                 "doctype": "Department",
                 "department_name": department_label,
-                "company": frappe.defaults.get_user_default("Company")
+                "company": NAPSA_CLIENT_INSTANCE.GetCompany()
             })
             dept.insert(ignore_permissions=True)
             department_id = dept.name
@@ -428,10 +426,10 @@ def create_employee():
     print_file("Police Report", POLICE_REPORT_DOC)
 
     
-    NRC_DOCUMENT_URL = save_file(NRC_DOC, site_name="erpnext.localhost", folder_type="NRC_DOC")
-    CV_DOCUMENT_URL = save_file(CV_DOC, site_name="erpnext.localhost", folder_type="CV_DOC")
-    CV_EDUCERT_URL = save_file(EDUCERT_DOC, site_name="erpnext.localhost", folder_type="EDUCERT_DOC")
-    POLICE_REPORT_DOC_URL = save_file(POLICE_REPORT_DOC, site_name="erpnext.localhost", folder_type="POLICE_REPORT_DOC")
+    NRC_DOCUMENT_URL = save_file(NRC_DOC, site_name=NAPSA_CLIENT_INSTANCE.GetDefaultSiteName(), folder_type="NRC_DOC")
+    CV_DOCUMENT_URL = save_file(CV_DOC, site_name=NAPSA_CLIENT_INSTANCE.GetDefaultSiteName(), folder_type="CV_DOC")
+    CV_EDUCERT_URL = save_file(EDUCERT_DOC, site_name=NAPSA_CLIENT_INSTANCE.GetDefaultSiteName(), folder_type="EDUCERT_DOC")
+    POLICE_REPORT_DOC_URL = save_file(POLICE_REPORT_DOC, site_name=NAPSA_CLIENT_INSTANCE.GetDefaultSiteName(), folder_type="POLICE_REPORT_DOC")
 
     employee_id = generate_employee_id()
     date = NAPSA_CLIENT_INSTANCE.GetStaticDate()
@@ -517,7 +515,7 @@ def create_employee():
         "employee": employee.name,
         "salary_structure": SalaryStructure,
         "base":   BasicAmount,
-        "from_date": "1964-01-01"
+        "from_date":  NAPSA_CLIENT_INSTANCE.GetStaticDate()
     })
 
     salaryStructureAssignment.insert(ignore_permissions=True)
@@ -534,7 +532,7 @@ def create_employee():
     )
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=False, methods=["GET"])
 def get_all_employees(page=None, page_size=None):
     try:
         page = int(page) if page else 1
@@ -1041,8 +1039,8 @@ def update_employee():
             shift_doc = frappe.get_doc({
                 "doctype": "Shift Type",
                 "name": shift,
-                "start_time": "09:00:00",
-                "end_time": "17:00:00",
+                "start_time": NAPSA_CLIENT_INSTANCE.GetDefaultShiftStart(),
+                "end_time":  NAPSA_CLIENT_INSTANCE.GetDefaultShiftEnd(),
                 "enable_auto_attendance": 0
             })
             shift_doc.insert(ignore_permissions=True)
@@ -1141,7 +1139,7 @@ def update_employee():
     for field, (file_key, folder) in files.items():
         file = frappe.local.request.files.get(file_key)
         if file:
-            employee.set(field, save_file(file, "erpnext.localhost", folder))
+            employee.set(field, save_file(file, NAPSA_CLIENT_INSTANCE.GetDefaultSiteName(), folder))
 
     employee.save(ignore_permissions=True)
     frappe.db.commit()
@@ -1310,7 +1308,7 @@ def manage_employee_documents():
             )
 
        
-        saved_file_url = save_file(file_obj, site_name="erpnext.localhost", folder_type="HUMAN_RESOURCE_PDF")
+        saved_file_url = save_file(file_obj, site_name=NAPSA_CLIENT_INSTANCE.GetDefaultSiteName(), folder_type="HUMAN_RESOURCE_PDF")
 
         if is_update and doc_id:
            
@@ -1389,7 +1387,7 @@ def update_employee_profile_photo():
         )
 
     employee = frappe.get_doc("Employee", employee_name)    
-    saved_file_url = save_file(file, site_name="erpnext.localhost", folder_type="EMPLOYEE_PROFILE_PHOTO")
+    saved_file_url = save_file(file, site_name=NAPSA_CLIENT_INSTANCE.GetDefaultSiteName(), folder_type="EMPLOYEE_PROFILE_PHOTO")
 
     print("Saved File URL:", saved_file_url)
     employee.image = saved_file_url

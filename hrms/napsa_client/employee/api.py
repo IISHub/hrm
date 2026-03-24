@@ -552,6 +552,7 @@ def get_all_employees(page=None, page_size=None):
     args = frappe.request.args
     filters = {}
 
+    
     if args.get("status"):
         filters["status"] = args.get("status")
 
@@ -1152,8 +1153,8 @@ def update_employee():
     )
 
 
-@frappe.whitelist()
-def delete_employee():
+@frappe.whitelist(allow_guest=False, methods=["PUT"])
+def disable_employee():
     data = frappe.form_dict
     employee_id = data.get("id") 
 
@@ -1165,13 +1166,14 @@ def delete_employee():
             http_status=400
         )
 
-    employee_name = frappe.db.get_value(
+    employee = frappe.db.get_value(
         "Employee",
         {"custom_id": employee_id},
-        "name"
+        ["name", "status"],
+        as_dict=True
     )
 
-    if not employee_name:
+    if not employee:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
             message=f"Employee {employee_id} not found",
@@ -1179,25 +1181,34 @@ def delete_employee():
             http_status=404
         )
 
+    if employee.status == "Inactive":
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Employee {employee_id} is already inactive",
+            status_code=400,
+            http_status=400
+        )
+
     try:
-        frappe.delete_doc(
-            doctype="Employee",
-            name=employee_name,
-            force=1
+        frappe.db.set_value(
+            "Employee",
+            employee.name,
+            "status",
+            "Inactive"
         )
 
         frappe.db.commit()
 
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="success",
-            message=f"Employee {employee_id} deleted successfully",
+            message=f"Employee {employee_id} disabled successfully",
             status_code=200,
             http_status=200
         )
 
     except Exception as e:
         frappe.log_error(
-            title="Delete Employee Error",
+            title="Disable Employee Error",
             message=frappe.get_traceback()
         )
 
@@ -1208,6 +1219,73 @@ def delete_employee():
             http_status=500
         )
 
+
+@frappe.whitelist(allow_guest=False, methods=["PUT"])
+def enable_employee():
+    data = frappe.form_dict
+    employee_id = data.get("id") 
+
+    if not employee_id:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Employee id is required",
+            status_code=400,
+            http_status=400
+        )
+
+    employee = frappe.db.get_value(
+        "Employee",
+        {"custom_id": employee_id},
+        ["name", "status"],
+        as_dict=True
+    )
+
+    if not employee:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Employee {employee_id} not found",
+            status_code=404,
+            http_status=404
+        )
+
+    if employee.status == "Active":
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Employee {employee_id} is already active",
+            status_code=400,
+            http_status=400
+        )
+
+    try:
+        frappe.db.set_value(
+            "Employee",
+            employee.name,
+            "status",
+            "Active"
+        )
+
+        frappe.db.commit()
+
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="success",
+            message=f"Employee {employee_id} re-enabled successfully",
+            status_code=200,
+            http_status=200
+        )
+
+    except Exception as e:
+        frappe.log_error(
+            title="Enable Employee Error",
+            message=frappe.get_traceback()
+        )
+
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=str(e),
+            status_code=500,
+            http_status=500
+        )
+        
 @frappe.whitelist(allow_guest=False)
 def manage_employee_documents():
     data = frappe.local.form_dict

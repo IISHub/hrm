@@ -85,6 +85,7 @@ def create_employee():
     BankName = data.get("BankName")
     AccountName = data.get("AccountName")
     AccountNumber = data.get("AccountNumber")
+    BranchName = data.get("BranchName")
     BranchCode = data.get("BranchCode")
     PaymentCashFullname = data.get("PaymentCashPersonFullName")
     PaymentCashId = data.get("PaymentCashPersonId")
@@ -461,6 +462,7 @@ def create_employee():
         "bank_name": BankName,
         "custom_accont_name": AccountName,
         "bank_ac_no": AccountNumber,
+        "custom_bank_branch_name": BranchName,
         "custom_bank_branch_code": BranchCode,
         "custom_verifiedfromsource": verifiedFromSource,
         "custom_address_street": addressStreet,
@@ -877,6 +879,7 @@ def get_employee():
                 "AccountNumber": employee.bank_ac_no,
                 "AccountName": employee.custom_accont_name,
                 "BankName": employee.bank_name,
+                "BranchName": employee.custom_bank_branch_name,
                 "branchCode": employee.custom_bank_branch_code,
                 "AccountType": employee.custom_bank_account_type
             },
@@ -990,6 +993,7 @@ def update_employee():
     status = data.get("status")
     SalaryStructure = data.get("SalaryStructure")
     GrossAmount = data.get("GrossAmount")
+    BranchName = data.get("BranchName")
 
     if reportingManager:
         if not frappe.db.exists("Employee", {"name": reportingManager}):
@@ -1093,6 +1097,7 @@ def update_employee():
         "custom_accont_name": AccountName,
         "bank_ac_no": AccountNumber,
         "custom_bank_branch_code": BranchCode,
+        "custom_bank_branch_name": BranchName,
         "custom_verifiedfromsource": verifiedFromSource,
         "custom_address_street": addressStreet,
         "custom_address_city": addressCity,

@@ -742,48 +742,10 @@ def get_employee():
         as_dict=True
     )
 
-    transportAllowance = 0
-    housingAllowance = 0
-    grossPay = 0
-    PayAsYouEarn = 0
-    EmployeeNapsa = 0
-    EmployeerNapsa = 0
-    EmployeeNhima = 0
-    EmployeerNhima = 0
-
     existing_assignment = assignment.name if assignment else None
     base = assignment.base if assignment else 0
 
-
-    transportAllowance = base * 0.10
-    housingAllowance = base * 0.30
-
-    pensionable_earnings = base + housingAllowance + transportAllowance
-
-    if pensionable_earnings >= 37236:
-        EmployeeNapsa = 1861.8
-    else:
-        EmployeeNapsa = pensionable_earnings * 0.05
-
-    EmployeerNapsa = EmployeeNapsa  
-
-
-    EmployeeNhima = base * 0.01
-    EmployeerNhima = base * 0.01
-    grossPay = pensionable_earnings
-
-
-    if grossPay <= 5100:
-        PayAsYouEarn = 0
-    elif grossPay <= 7100:
-        PayAsYouEarn = (grossPay - 5100) * 0.20
-    elif grossPay <= 9200:
-        PayAsYouEarn = (2000 * 0.20) + (grossPay - 7100) * 0.30
-    else:
-        PayAsYouEarn = (2000 * 0.20) + (2100 * 0.30) + (grossPay - 9200) * 0.37
-
-
-        
+    payroll = NAPSA_CLIENT_INSTANCE.CalculateAllowancesAndDeductions(base)
 
 
     doc_list = []
@@ -858,22 +820,22 @@ def get_employee():
             }
         },
         "payrollInfo": {
-            "grossSalary": grossPay,
+            "grossSalary": payroll["gross_pay"],
             "currency": employee.salary_currency,
             "paymentFrequency": getattr(employee, "custom_payment_frequency", None),
             "paymentMethod": employee.custom_payment_method,
             "salaryBreakdown": {
                 "BasicSalary": base,
-                "HousingAllowance": housingAllowance,
-                "TransportAllowance": transportAllowance,
+                "HousingAllowance": payroll["housing_allowance"],
+                "TransportAllowance": payroll["transport_allowance"]
 
             },
             "statutoryDeductions": {
-                "EmployeeNapsa": EmployeeNapsa,
-                "EmployeerNapsa": EmployeerNapsa,
-                "EmployeeNhima": EmployeeNhima,
-                "EmployeerNhima": EmployeerNhima,
-                "PayAsYouEarn": PayAsYouEarn
+                "EmployeeNapsa": payroll["employee_napsa"],
+                "EmployeerNapsa": payroll["employer_napsa"],
+                "EmployeeNhima": payroll["employee_nhima"],
+                "EmployeerNhima": payroll["employer_nhima"],
+                "PayAsYouEarn": payroll["paye"]
             },
             "bankAccount": {
                 "AccountNumber": employee.bank_ac_no,

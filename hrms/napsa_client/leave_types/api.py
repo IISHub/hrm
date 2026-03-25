@@ -260,7 +260,6 @@ def update_leave_type():
 
 @frappe.whitelist(allow_guest=False, methods=["DELETE"])
 def delete_leave_type():
-    """Delete a Leave Type"""
     data = frappe.local.form_dict
     name = data.get("name")
 

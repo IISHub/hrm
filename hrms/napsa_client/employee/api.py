@@ -128,10 +128,9 @@ def create_employee():
     MealAllowance = data.get("MealAllowance")
     TransportAllowance = data.get("TransportAllowance")
     otherAllowances = data.get("otherAllowances")
-    GrossSalary = data.get("GrossSalary")
     Nationality = data.get("Nationality")
     SalaryStructure = data.get("SalaryStructure")
-    GrossAmount = data.get("GrossAmount")
+    BasicAmount = data.get("BasicAmount")
     status = data.get("status")
     
     if not FirstName:
@@ -289,15 +288,14 @@ def create_employee():
                 http_status=400
             )
             
-    if not GrossAmount:
+    if not BasicAmount:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status = "fail",
-            message = "Gross Amount must not be null",
+            message = "Basic Amount must not be null",
             status_code = 400,
             http_status= 400,
         )
-        
-    BasicAmount = NAPSA_CLIENT_INSTANCE.CalculateBasicBasedOnGrosssPay(GrossAmount)
+
     
     availableTypeMethods = NAPSA_CLIENT_INSTANCE.GetPaymentTypes()
 
@@ -493,7 +491,6 @@ def create_employee():
         "custom_transport_allowance": TransportAllowance,
         "custom_otherallowances": otherAllowances,
         "custom_meal_allowance": MealAllowance,
-        "custom_gross_salary": GrossSalary,
         "custom_nationality": Nationality,
         "custom_nrc": NRC_DOCUMENT_URL,
         "custom_cv": CV_DOCUMENT_URL,
@@ -903,6 +900,7 @@ def update_employee():
     employee = frappe.get_doc("Employee", employee_name)
     EngagementDate = NAPSA_CLIENT_INSTANCE.GetStaticDate()
     Email = data.get("Email")
+    Dob = data.get("Dob")
     CompanyEmail = data.get("CompanyEmail")
     MaritalStatus = data.get("MaritalStatus")
     PhoneNumber = data.get("PhoneNumber")
@@ -954,7 +952,7 @@ def update_employee():
     Nationality = data.get("Nationality")
     status = data.get("status")
     SalaryStructure = data.get("SalaryStructure")
-    GrossAmount = data.get("GrossAmount")
+    BasicAmount = data.get("BasicAmount")
     BranchName = data.get("BranchName")
 
     if reportingManager:
@@ -1089,8 +1087,9 @@ def update_employee():
         "custom_transport_allowance": TransportAllowance,
         "custom_otherallowances": otherAllowances,
         "custom_meal_allowance": MealAllowance,
-        "custom_gross_salary": GrossAmount,
+        "custom_gross_salary": BasicAmount,
         "custom_nationality": Nationality,
+        "custom_dob": Dob,
         "status": status,
     }
 
@@ -1114,8 +1113,7 @@ def update_employee():
     employee.save(ignore_permissions=True)
     frappe.db.commit()
     
-    if SalaryStructure or GrossAmount:
-        BasicAmount = NAPSA_CLIENT_INSTANCE.CalculateBasicBasedOnGrosssPay(GrossAmount)
+    if SalaryStructure or BasicAmount:
         assignment_name = frappe.db.get_value("Salary Structure Assignment", {"employee": employee.name}, "name")
         try:
             if assignment_name:

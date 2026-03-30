@@ -70,6 +70,7 @@ def create_employee():
     FirstName = data.get("FirstName")
     LastName = data.get("LastName")
     OtherNames = data.get("OtherNames")
+    MiddleName = data.get("MiddleName")
     EngagementDate = data.get("EngagementDate")
     Dob = data.get("Dob")
     Gender = data.get("Gender")
@@ -438,6 +439,7 @@ def create_employee():
         "first_name": FirstName,
         "last_name": LastName,
         "middle_name": OtherNames,
+        "custom_other_name": MiddleName,
         "gender": Gender,
         "date_of_birth": date,
         "date_of_joining": date,
@@ -771,6 +773,7 @@ def get_employee():
         "personalInfo": {
             "FirstName": employee.first_name,
             "OtherNames": employee.middle_name,
+            "MiddleName": employee.custom_other_name,
             "LastName": employee.last_name,
             "Dob": str(employee.custom_dob),
             "Gender": employee.gender,

@@ -1,11 +1,14 @@
+
+from hrms.napsa_client.employee.employeeContract import createEmploymentContract
 from hrms.napsa_client.save_files.save import save_file
 from hrms.napsa_client.main import NapsaClient
 from urllib.parse import urljoin
+from datetime import datetime
 from frappe import _
 import random
 import frappe
 import math
-
+import datetime
 
 
 
@@ -70,6 +73,7 @@ def create_employee():
     FirstName = data.get("FirstName")
     LastName = data.get("LastName")
     OtherNames = data.get("OtherNames")
+    MiddleName = data.get("MiddleName")
     EngagementDate = data.get("EngagementDate")
     Dob = data.get("Dob")
     Gender = data.get("Gender")
@@ -109,9 +113,10 @@ def create_employee():
     emergencyContactPhone = data.get("emergencyContactPhone")
     emergencyContactRelationship = data.get("emergencyContactRelationship")
     shift = data.get("shift")
-    reportingManager = data.get("ReportingManager")
     probationPeriod = data.get("probationPeriod")
+    contractStartDate = data.get("contractStartDate")
     contractEndDate = data.get("contractEndDate")
+    contractTerms = data.get("contractTerms")
     workLocation = data.get("workLocation")
     workAddress = data.get("workAddress")
     weeklyScheduleMonday = data.get("weeklyScheduleMonday")
@@ -160,7 +165,17 @@ def create_employee():
     if not JobTitle:
         return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Job title is required", status_code=400, http_status=400)
 
+    if not EmployeeType:
+        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Employee type is required", status_code=400, http_status=400)
     
+    if not contractStartDate:
+        contractStartDate = datetime.date.today().strftime("%Y-%m-%d")
+        # return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Contract start date is required", status_code=400, http_status=400)
+    
+    if not contractTerms:
+        contractTerms = f"{EmployeeType} employment contract for {FirstName} {LastName}"
+        # return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Contract terms is required", status_code=400, http_status=400)
+
     existing_employee = frappe.db.get_value("Employee", {"personal_email": Email}, "name")
     if existing_employee:
         return NAPSA_CLIENT_INSTANCE.send_response(
@@ -246,14 +261,6 @@ def create_employee():
                 http_status=400
             )
             
-    if reportingManager:
-        if not frappe.db.exists("Employee", {"name": reportingManager}):
-            return NAPSA_CLIENT_INSTANCE.send_response(
-                status="fail",
-                message= f"Reporting Manager '{reportingManager}' does not exist.",
-                status_code=400,
-                http_status=400
-            )
     
     ALLOWED_MARITAL_STATUS = {
         "",
@@ -317,6 +324,37 @@ def create_employee():
                 http_status=400
             )
             
+    DATE_FORMAT = "%Y-%m-%d"
+
+    try:
+        start = datetime.datetime.strptime(contractStartDate, DATE_FORMAT)
+    except ValueError:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Invalid contract start date format. Expected YYYY-MM-DD.",
+            status_code=400,
+            http_status=400
+        )
+
+    if contractEndDate: 
+        try:
+            end = datetime.datetime.strptime(contractEndDate, DATE_FORMAT)
+        except ValueError:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Invalid contract end date format. Expected YYYY-MM-DD.",
+                status_code=400,
+                http_status=400
+            )
+
+        if start > end:
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message="Contract start date cannot be after end date.",
+                status_code=400,
+                http_status=400
+            )
+
     
     errors = []
 
@@ -432,102 +470,147 @@ def create_employee():
 
     employee_id = generate_employee_id()
     date = NAPSA_CLIENT_INSTANCE.GetStaticDate()
-    employee = frappe.get_doc({
-        "doctype": "Employee",
-        "custom_id": employee_id,
-        "first_name": FirstName,
-        "last_name": LastName,
-        "middle_name": OtherNames,
-        "gender": Gender,
-        "date_of_birth": date,
-        "date_of_joining": date,
-        "personal_email": Email,
-        "company_email": CompanyEmail,
-        "cell_number": PhoneNumber,
-        "custom_alternate_phone": AlternatePhone,
-        "marital_status": MaritalStatus,
-        "department": department_id,
-        "custom_jobtitle": JobTitle,
-        "custom_employeetype": EmployeeType,
-        "custom_tax_payer_indentification_number": TpinId,
-        "custom_national_registration_number": NrcId,
-        "custom_nhima_health_insurance_number": NhimaHealthInsurance,
-        "custom_social_security_number": SocialSecurityNapsa,
-        "custom_ceiling_year": CeilingYear,
-        "custom_ceiling_amount": CeilingAmount,
-        "custom_payment_method": PaymentMethod,
-        "custom_bank_account_type": AccountType,
-        "bank_name": BankName,
-        "custom_accont_name": AccountName,
-        "bank_ac_no": AccountNumber,
-        "custom_bank_branch_name": BranchName,
-        "custom_bank_branch_code": BranchCode,
-        "custom_verifiedfromsource": verifiedFromSource,
-        "custom_address_street": addressStreet,
-        "custom_address_city": addressCity,
-        "custom_address_province": addressProvince,
-        "custom_address_postal_code": addressPostalCode,
-        "custom_address_country": addressCountry,
-        "custom_emergency_contact_name": emergencyContactName,
-        "custom_emergency_contact_phone": emergencyContactPhone,
-        "custom_emergency_contact_relationship": emergencyContactRelationship,
-        "reports_to": reportingManager,
-        "default_shift": shift_id,
-        "custom_probation_period": probationPeriod,
-        "custom_work_location": workLocation,
-        "custom_work_address": workAddress,
-        "contract_end_date": contractEndDate,
-        "custom_weekly_schedule_monday": weeklyScheduleMonday,
-        "custom_weekly_schedule_tuesday": weeklyScheduleTuesday,
-        "custom_weekly_schedule_wednesday": weeklyScheduleWednesday,
-        "custom_weekly_schedule_thursday": weeklyScheduleThursday,
-        "custom_weekly_schedule_friday": weeklyScheduleFriday,
-        "custom_weekly_schedule_saturday": weeklyScheduleSaturday,
-        "custom_weekly_schedule_sunday": weeklyScheduleSunday,
-        "salary_currency": currency,
-        "custom_payment_frequency": PaymentFrequency,
-        "custom_basic_salary": BasicSalary,
-        "custom_housing_allowance": HousingAllowance,
-        "custom_transport_allowance": TransportAllowance,
-        "custom_otherallowances": otherAllowances,
-        "custom_meal_allowance": MealAllowance,
-        "custom_nationality": Nationality,
-        "custom_nrc": NRC_DOCUMENT_URL,
-        "custom_cv": CV_DOCUMENT_URL,
-        "custom_educationcertificates": CV_EDUCERT_URL,
-        "custom_policereport": POLICE_REPORT_DOC_URL,
-        "custom_dob": Dob,
-        "custom_doj": EngagementDate,
-        "custom_payment_cash_full_name_": PaymentCashFullname,
-        "custom_payment_cash_id": PaymentCashId,
-        "custom_payment_mobile_full_name": PaymentMobileFullname,
-        "custom_payment_mobile_phone": PaymentMobilePhone,
-        "custom_payment_mobile_mno":  PaymentMobileMno,
-        "status": status,
-    })
+    try: 
+        employee = frappe.get_doc({
+            "doctype": "Employee",
+            "custom_id": employee_id,
+            "first_name": FirstName,
+            "last_name": LastName,
+            "middle_name": OtherNames,
+            "custom_other_name": MiddleName,
+            "gender": Gender,
+            "date_of_birth": date,
+            "date_of_joining": date,
+            "personal_email": Email,
+            "company_email": CompanyEmail,
+            "cell_number": PhoneNumber,
+            "person_to_be_contacted": emergencyContactName,
+            "emergency_phone_number": emergencyContactPhone,
+            "relation": emergencyContactRelationship,
+            "designation": JobTitle,
+            "employment_type": EmployeeType,
+            "custom_alternate_phone": AlternatePhone,
+            "marital_status": MaritalStatus,
+            "department": department_id,
+            "custom_tax_payer_indentification_number": TpinId,
+            "custom_national_registration_number": NrcId,
+            "custom_nhima_health_insurance_number": NhimaHealthInsurance,
+            "custom_social_security_number": SocialSecurityNapsa,
+            "custom_ceiling_year": CeilingYear,
+            "custom_ceiling_amount": CeilingAmount,
+            "custom_payment_method": PaymentMethod,
+            "custom_bank_account_type": AccountType,
+            "bank_name": BankName,
+            "custom_accont_name": AccountName,
+            "bank_ac_no": AccountNumber,
+            "custom_bank_branch_name": BranchName,
+            "custom_bank_branch_code": BranchCode,
+            "custom_verifiedfromsource": verifiedFromSource,
+            "custom_address_street": addressStreet,
+            "custom_address_city": addressCity,
+            "custom_address_province": addressProvince,
+            "custom_address_postal_code": addressPostalCode,
+            "custom_address_country": addressCountry,
+            "custom_emergency_contact_name": emergencyContactName,
+            "custom_emergency_contact_phone": emergencyContactPhone,
+            "custom_emergency_contact_relationship": emergencyContactRelationship,
+            "default_shift": shift_id,
+            "custom_probation_period": probationPeriod,
+            "custom_work_location": workLocation,
+            "custom_work_address": workAddress,
+            "contract_end_date": contractEndDate,
+            "custom_weekly_schedule_monday": weeklyScheduleMonday,
+            "custom_weekly_schedule_tuesday": weeklyScheduleTuesday,
+            "custom_weekly_schedule_wednesday": weeklyScheduleWednesday,
+            "custom_weekly_schedule_thursday": weeklyScheduleThursday,
+            "custom_weekly_schedule_friday": weeklyScheduleFriday,
+            "custom_weekly_schedule_saturday": weeklyScheduleSaturday,
+            "custom_weekly_schedule_sunday": weeklyScheduleSunday,
+            "salary_currency": currency,
+            "custom_payment_frequency": PaymentFrequency,
+            "custom_basic_salary": BasicSalary,
+            "custom_housing_allowance": HousingAllowance,
+            "custom_transport_allowance": TransportAllowance,
+            "custom_otherallowances": otherAllowances,
+            "custom_meal_allowance": MealAllowance,
+            "custom_nationality": Nationality,
+            "custom_nrc": NRC_DOCUMENT_URL,
+            "custom_cv": CV_DOCUMENT_URL,
+            "custom_educationcertificates": CV_EDUCERT_URL,
+            "custom_policereport": POLICE_REPORT_DOC_URL,
+            "custom_dob": Dob,
+            "custom_doj": EngagementDate,
+            "custom_payment_cash_full_name_": PaymentCashFullname,
+            "custom_payment_cash_id": PaymentCashId,
+            "custom_payment_mobile_full_name": PaymentMobileFullname,
+            "custom_payment_mobile_phone": PaymentMobilePhone,
+            "custom_payment_mobile_mno":  PaymentMobileMno,
+            "status": status,
+        })
 
-    employee.insert(ignore_permissions=True)
-    frappe.db.commit()
-    
-    salaryStructureAssignment = frappe.get_doc({
-        "doctype": "Salary Structure Assignment",
-        "employee": employee.name,
-        "salary_structure": SalaryStructure,
-        "base":   BasicAmount,
-        "from_date":  NAPSA_CLIENT_INSTANCE.GetStaticDate()
-    })
+        employee.insert(ignore_permissions=True)
+        
+        salaryStructureAssignment = frappe.get_doc({
+            "doctype": "Salary Structure Assignment",
+            "employee": employee.name,
+            "salary_structure": SalaryStructure,
+            "base":   BasicAmount,
+            "from_date":  NAPSA_CLIENT_INSTANCE.GetStaticDate()
+        })
 
-    salaryStructureAssignment.insert(ignore_permissions=True)
-    salaryStructureAssignment.submit()
+        salaryStructureAssignment.insert(ignore_permissions=True)
+        salaryStructureAssignment.submit()
+        
+        result = createEmploymentContract(employee, EmployeeType, contractStartDate, contractEndDate, contractTerms)
+        if result["status"] != "success":
 
-    frappe.db.commit()
+            frappe.db.rollback()
+            return NAPSA_CLIENT_INSTANCE.send_response(
+                status="fail",
+                message=f"Employee creation failed due to contract error: {contract_result['message']}",
+                status_code=400,
+                http_status=400
+            )
+                        
+
+        frappe.db.commit()
+
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="success", 
+            message="Employee added successfully", 
+            data=[],
+            status_code=201, 
+            http_status=201
+        )
+        
+    except frappe.ValidationError as e:
+        frappe.db.rollback()
+
+        frappe.log_error(
+            title="Validation Error During Employee Creation",
+            message=frappe.get_traceback()
+        )
+
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message=f"Validation error: {str(e)}",
+            status_code=400,
+            http_status=400
+        )
+
+    except Exception as e:
+        frappe.db.rollback()
+
+        frappe.log_error(
+            title="Employee Transaction Failed",
+            message=frappe.get_traceback()
+        )
 
     return NAPSA_CLIENT_INSTANCE.send_response(
-        status="success", 
-        message="Employee added successfully", 
-        data=[],
-        status_code=201, 
-        http_status=201
+        status="fail",
+        message=f"Failed to create employee: {str(e)}",
+        status_code=500,
+        http_status=500
     )
 
 
@@ -725,6 +808,14 @@ def get_employee():
     department_name = employee.department.split(" - ")[0] if employee.department else None
     shift_name = employee.default_shift if employee.default_shift else None
     
+    employee_contracts = frappe.get_all(
+        "Contract",
+        filters={
+            "party_name": employee.name,
+        },
+        fields=["name", "start_date", "end_date", "status", "contract_terms"]
+    )
+    
     documents = frappe.get_all(
         "HR Documents",
         filters={
@@ -771,6 +862,7 @@ def get_employee():
         "personalInfo": {
             "FirstName": employee.first_name,
             "OtherNames": employee.middle_name,
+            "MiddleName": employee.custom_other_name,
             "LastName": employee.last_name,
             "Dob": str(employee.custom_dob),
             "Gender": employee.gender,
@@ -790,16 +882,16 @@ def get_employee():
                 "country": employee.custom_address_country
             },
             "emergencyContact": {
-                "name": employee.custom_emergency_contact_name,
-                "phone": employee.custom_emergency_contact_phone,
-                "relationship": employee.custom_emergency_contact_relationship
+                "name": employee.person_to_be_contacted,
+                "phone": employee.emergency_phone_number,
+                "relationship": employee.relation
             }
         },
         "employmentInfo": {
             "Department":  department_name,
-            "JobTitle": getattr(employee, "custom_jobtitle", None),
+            "JobTitle": employee.designation,
             "reportingManager": employee.reports_to,
-            "EmployeeType": getattr(employee, "custom_employeetype", None),
+            "EmployeeType": employee.employment_type,
             "joiningDate": str(employee.custom_doj),
             "probationPeriod": getattr(employee, "custom_probation_period", None),
             "contractEndDate": str(employee.contract_end_date) if employee.contract_end_date else None,
@@ -855,7 +947,8 @@ def get_employee():
         
         },
         "documents": doc_list,
-        "ProfilePicture": employee.image
+        "ProfilePicture": employee.image,
+        "contracts": employee_contracts
     }
 
     return NAPSA_CLIENT_INSTANCE.send_response(
@@ -1043,8 +1136,8 @@ def update_employee():
         "custom_alternate_phone": AlternatePhone,
         "marital_status": MaritalStatus,
         "department": department_id,
-        "custom_jobtitle": JobTitle,
-        "custom_employeetype": EmployeeType,
+        "designation": JobTitle,
+        "employment_type": EmployeeType,
         "custom_tax_payer_indentification_number": TpinId,
         "custom_national_registration_number": NrcId,
         "custom_nhima_health_insurance_number": NhimaHealthInsurance,
@@ -1064,9 +1157,9 @@ def update_employee():
         "custom_address_province": addressProvince,
         "custom_address_postal_code": addressPostalCode,
         "custom_address_country": addressCountry,
-        "custom_emergency_contact_name": emergencyContactName,
-        "custom_emergency_contact_phone": emergencyContactPhone,
-        "custom_emergency_contact_relationship": emergencyContactRelationship,
+        "person_to_be_contacted": emergencyContactName,
+        "emergency_phone_number": emergencyContactPhone,
+        "relation": emergencyContactRelationship,
         "reports_to": reportingManager,
         # "default_shift": shift_id,
         "custom_probation_period": probationPeriod,

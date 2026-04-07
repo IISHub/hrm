@@ -231,3 +231,27 @@ class NapsaClient():
     
     def GetLoggedInUser(self):
         return frappe.session.user
+    
+    
+    def GetCurrentCompanyName(self):
+        company = self.GetCompany()
+        return company.company_name or ""
+    
+    
+    def GetDefaultCostCenter(self):
+        company_id = self.GetCompanyId()
+        cost_center = frappe.db.get_value(
+            "Company",
+            {"custom_company_id": company_id},
+            "cost_center"                   
+        )
+
+        if not cost_center:
+            return self.send_response(
+                status="fail",
+                message="Default Cost Center (cost_center) is not set for this company",
+                status_code=400,
+                http_status=400
+            )
+
+        return cost_center

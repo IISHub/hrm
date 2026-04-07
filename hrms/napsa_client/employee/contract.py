@@ -6,6 +6,9 @@ import frappe
 NAPSA_CLIENT_INSTANCE = NapsaClient()
 
 
+from datetime import datetime
+import frappe
+
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def terminate_contract():
     data = frappe.form_dict
@@ -37,9 +40,10 @@ def terminate_contract():
             http_status=400,
             status_code=400
         )
-    
+
     try:
         contract = frappe.get_doc("Contract", contract_name)
+        
         if contract.status != "Active":
             return NAPSA_CLIENT_INSTANCE.send_response(
                 status="fail",
@@ -55,13 +59,12 @@ def terminate_contract():
                 http_status=400,
                 status_code=400
             )
-        
-        contract.status = "Inactive"
-        contract.end_date = termination_date
-        contract.end_date = termination_date
-        contract.save()
 
-        frappe.db.set_value("Contract", contract.name, "status", "Inactive")
+        # Force update status to Inactive and set end_date
+        frappe.db.set_value("Contract", contract_name, {
+            "status": "Inactive",
+            "end_date": termination_date
+        })
         frappe.db.commit()
         
         return NAPSA_CLIENT_INSTANCE.send_response(
@@ -70,7 +73,7 @@ def terminate_contract():
             http_status=200,
             message=f"Contract {contract_name} terminated successfully."
         )
-    
+
     except frappe.DoesNotExistError:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
@@ -90,16 +93,17 @@ def terminate_contract():
             http_status=500,
             status_code=500
         )
-        
-        
+  
+  
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def create_new_contract():
-    data = frappe.form_dict
+    from datetime import datetime
 
+    data = frappe.form_dict
     employee_id = data.get("employeeId")
     contract_type = data.get("contractType")
     start_date_str = data.get("startDate")
-    end_date_str = data.get("endDate")
+    contract_terms = data.get("contractTerms")
 
     if not employee_id:
         return NAPSA_CLIENT_INSTANCE.send_response(
@@ -125,12 +129,16 @@ def create_new_contract():
             status_code=400
         )
 
+    if not contract_terms:
+        return NAPSA_CLIENT_INSTANCE.send_response(
+            status="fail",
+            message="Contract terms are required.",
+            http_status=400,
+            status_code=400
+        )
+
     try:
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-        end_date = (
-            datetime.strptime(end_date_str, "%Y-%m-%d").date()
-            if end_date_str else None
-        )
     except ValueError:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
@@ -141,8 +149,6 @@ def create_new_contract():
 
     try:
         employee = frappe.get_doc("Employee", employee_id)
-
-        # CHECK ACTIVE CONTRACT FIRST
         active_contract = frappe.db.exists(
             "Contract",
             {
@@ -166,17 +172,24 @@ def create_new_contract():
             "party_full_name": f"{employee.first_name} {employee.last_name}",
             "contract_type": contract_type,
             "start_date": start_date,
-            "end_date": end_date
+            "is_signed": 1,
+            "contract_terms": contract_terms 
         })
 
         contract.insert(ignore_permissions=True)
+        contract.submit()
+
+        employee.employment_type = contract_type
+        employee.save(ignore_permissions=True)
+
+        frappe.db.commit()
 
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="success",
+            status_code=200,
+            http_status=200,
             message="Contract created successfully.",
-            data={
-                "contractName": contract.name
-            }
+            data={"contractName": contract.name}
         )
 
     except Exception as e:

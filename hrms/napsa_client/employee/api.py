@@ -113,7 +113,6 @@ def create_employee():
     emergencyContactPhone = data.get("emergencyContactPhone")
     emergencyContactRelationship = data.get("emergencyContactRelationship")
     shift = data.get("shift")
-    reportingManager = data.get("ReportingManager")
     probationPeriod = data.get("probationPeriod")
     contractStartDate = data.get("contractStartDate")
     contractEndDate = data.get("contractEndDate")
@@ -265,14 +264,6 @@ def create_employee():
                 http_status=400
             )
             
-    if reportingManager:
-        if not frappe.db.exists("Employee", {"name": reportingManager}):
-            return NAPSA_CLIENT_INSTANCE.send_response(
-                status="fail",
-                message= f"Reporting Manager '{reportingManager}' does not exist.",
-                status_code=400,
-                http_status=400
-            )
     
     ALLOWED_MARITAL_STATUS = {
         "",
@@ -523,7 +514,6 @@ def create_employee():
             "custom_emergency_contact_name": emergencyContactName,
             "custom_emergency_contact_phone": emergencyContactPhone,
             "custom_emergency_contact_relationship": emergencyContactRelationship,
-            "reports_to": reportingManager,
             "default_shift": shift_id,
             "custom_probation_period": probationPeriod,
             "custom_work_location": workLocation,

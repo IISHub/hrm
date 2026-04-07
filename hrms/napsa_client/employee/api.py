@@ -172,9 +172,6 @@ def create_employee():
         contractStartDate = datetime.date.today().strftime("%Y-%m-%d")
         # return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Contract start date is required", status_code=400, http_status=400)
     
-    if EmployeeType != "Permanent" and not contractEndDate:
-        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Contract end date is required for employee other than permanent employees", status_code=400, http_status=400)
-
     if not contractTerms:
         contractTerms = f"{EmployeeType} employment contract for {FirstName} {LastName}"
         # return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Contract terms is required", status_code=400, http_status=400)
@@ -487,11 +484,14 @@ def create_employee():
             "personal_email": Email,
             "company_email": CompanyEmail,
             "cell_number": PhoneNumber,
+            "person_to_be_contacted": emergencyContactName,
+            "emergency_phone_number": emergencyContactPhone,
+            "relation": emergencyContactRelationship,
+            "designation": JobTitle,
+            "employment_type": EmployeeType,
             "custom_alternate_phone": AlternatePhone,
             "marital_status": MaritalStatus,
             "department": department_id,
-            "custom_jobtitle": JobTitle,
-            "custom_employeetype": EmployeeType,
             "custom_tax_payer_indentification_number": TpinId,
             "custom_national_registration_number": NrcId,
             "custom_nhima_health_insurance_number": NhimaHealthInsurance,
@@ -882,16 +882,16 @@ def get_employee():
                 "country": employee.custom_address_country
             },
             "emergencyContact": {
-                "name": employee.custom_emergency_contact_name,
-                "phone": employee.custom_emergency_contact_phone,
-                "relationship": employee.custom_emergency_contact_relationship
+                "name": employee.person_to_be_contacted,
+                "phone": employee.emergency_phone_number,
+                "relationship": employee.relation
             }
         },
         "employmentInfo": {
             "Department":  department_name,
-            "JobTitle": getattr(employee, "custom_jobtitle", None),
+            "JobTitle": employee.designation,
             "reportingManager": employee.reports_to,
-            "EmployeeType": getattr(employee, "custom_employeetype", None),
+            "EmployeeType": employee.employment_type,
             "joiningDate": str(employee.custom_doj),
             "probationPeriod": getattr(employee, "custom_probation_period", None),
             "contractEndDate": str(employee.contract_end_date) if employee.contract_end_date else None,
@@ -1136,8 +1136,8 @@ def update_employee():
         "custom_alternate_phone": AlternatePhone,
         "marital_status": MaritalStatus,
         "department": department_id,
-        "custom_jobtitle": JobTitle,
-        "custom_employeetype": EmployeeType,
+        "designation": JobTitle,
+        "employment_type": EmployeeType,
         "custom_tax_payer_indentification_number": TpinId,
         "custom_national_registration_number": NrcId,
         "custom_nhima_health_insurance_number": NhimaHealthInsurance,
@@ -1157,9 +1157,9 @@ def update_employee():
         "custom_address_province": addressProvince,
         "custom_address_postal_code": addressPostalCode,
         "custom_address_country": addressCountry,
-        "custom_emergency_contact_name": emergencyContactName,
-        "custom_emergency_contact_phone": emergencyContactPhone,
-        "custom_emergency_contact_relationship": emergencyContactRelationship,
+        "person_to_be_contacted": emergencyContactName,
+        "emergency_phone_number": emergencyContactPhone,
+        "relation": emergencyContactRelationship,
         "reports_to": reportingManager,
         # "default_shift": shift_id,
         "custom_probation_period": probationPeriod,

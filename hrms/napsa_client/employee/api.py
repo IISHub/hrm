@@ -8,7 +8,7 @@ from frappe import _
 import random
 import frappe
 import math
-
+import datetime
 
 
 
@@ -170,13 +170,15 @@ def create_employee():
         return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Employee type is required", status_code=400, http_status=400)
     
     if not contractStartDate:
-        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Contract start date is required", status_code=400, http_status=400)
+        contractStartDate = datetime.date.today().strftime("%Y-%m-%d")
+        # return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Contract start date is required", status_code=400, http_status=400)
     
     if EmployeeType != "Permanent" and not contractEndDate:
         return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Contract end date is required for employee other than permanent employees", status_code=400, http_status=400)
 
     if not contractTerms:
-        return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Contract terms is required", status_code=400, http_status=400)
+        contractTerms = f"{EmployeeType} employment contract for {FirstName} {LastName}"
+        # return NAPSA_CLIENT_INSTANCE.send_response(status="fail", message="Contract terms is required", status_code=400, http_status=400)
 
     existing_employee = frappe.db.get_value("Employee", {"personal_email": Email}, "name")
     if existing_employee:
@@ -337,7 +339,7 @@ def create_employee():
     DATE_FORMAT = "%Y-%m-%d"
 
     try:
-        start = datetime.strptime(contractStartDate, DATE_FORMAT)
+        start = datetime.datetime.strptime(contractStartDate, DATE_FORMAT)
     except ValueError:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
@@ -348,7 +350,7 @@ def create_employee():
 
     if contractEndDate: 
         try:
-            end = datetime.strptime(contractEndDate, DATE_FORMAT)
+            end = datetime.datetime.strptime(contractEndDate, DATE_FORMAT)
         except ValueError:
             return NAPSA_CLIENT_INSTANCE.send_response(
                 status="fail",

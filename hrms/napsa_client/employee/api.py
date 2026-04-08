@@ -476,7 +476,7 @@ def create_employee():
     try: 
         employee = frappe.get_doc({
             "doctype": "Employee",
-            # "company": company,
+            "company": company,
             "custom_id": employee_id,
             "first_name": FirstName,
             "last_name": LastName,
@@ -549,7 +549,7 @@ def create_employee():
             "custom_payment_mobile_full_name": PaymentMobileFullname,
             "custom_payment_mobile_phone": PaymentMobilePhone,
             "custom_payment_mobile_mno":  PaymentMobileMno,
-            # "payroll_cost_center": costCenter,
+            "payroll_cost_center": costCenter,
             "status": status,
         })
 
@@ -636,7 +636,8 @@ def get_all_employees(page=None, page_size=None):
     offset = (page - 1) * page_size
 
     args = frappe.request.args
-    filters = {}
+    company = NAPSA_CLIENT_INSTANCE.GetCurrentCompanyName()
+    filters = {"company": company}
 
     
     if args.get("status"):

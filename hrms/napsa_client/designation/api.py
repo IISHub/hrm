@@ -1,13 +1,6 @@
 from hrms.napsa_client.main import NapsaClient
-from urllib.parse import urljoin
-from datetime import datetime
 from frappe import _
-import random
 import frappe
-import math
-import datetime
-
-
 
 NAPSA_CLIENT_INSTANCE = NapsaClient()
 
@@ -18,6 +11,10 @@ def designations():
             "Designation",
             fields=["name"]
         )
+
+        # Convert all designation names to uppercase
+        for d in designations:
+            d["name"] = d["name"].upper() if d.get("name") else d.get("name")
 
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="success",

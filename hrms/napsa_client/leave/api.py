@@ -67,186 +67,10 @@ def calculate_working_days(from_date, to_date):
 
 
 
-@frappe.whitelist()
-def create_leave_application():
-    data = frappe.form_dict
-
-    employeeId = data.get("employeeId")
-    leaveType = data.get("leaveType")
-    leaveFromDate = data.get("leaveFromDate")
-    leaveToDate = data.get("leaveToDate")
-    isHalfDay = data.get("isHalfDay")
-    leaveReason = data.get("leaveReason")
-    leaveStatus = data.get("leaveStatus") or "Pending"
-    approverId = NAPSA_CLIENT_INSTANCE.get_approver_name()
-
-    required_fields = {
-        "employeeId": employeeId,
-        "leaveType": leaveType,
-        "leaveFromDate": leaveFromDate,
-        "leaveToDate": leaveToDate,
-        "leaveReason": leaveReason,
-    }
-
-    missing_fields = [k for k, v in required_fields.items() if not v]
-
-    if missing_fields:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message=f"Missing required fields: {', '.join(missing_fields)}",
-            status_code=400,
-            http_status=400
-        )
-        
-    allowed_status = ["Open", "Approved", "Rejected", "Cancelled"]
-
-    if leaveStatus not in allowed_status:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="Invalid status. Allowed values: Open, Approved, Rejected, Cancelled",
-            status_code=400,
-            http_status=400
-        )
-        
-    
-    allowed_leave_types = NAPSA_CLIENT_INSTANCE.getAllAllowedLeaveTypes()
-
-    if leaveType not in allowed_leave_types:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="Invalid Leave Type. Allowed types: Leave Without Pay, Privilege Leave, Sick Leave, Compensatory Off, Casual Leave",
-            status_code=400,
-            http_status=400
-    )
-
-    employee_name = frappe.db.get_value(
-        "Employee",
-        {"custom_id": employeeId},
-        "name"
-    )
-
-    if not employee_name:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="Employee not found",
-            status_code=404,
-            http_status=404
-        )
-
-    from_date = getdate(leaveFromDate)
-    to_date = getdate(leaveToDate)
-    
-    existing_leave = frappe.get_all("Leave Application", filters={
-        "employee": employee_name,
-        "leave_type": leaveType,
-        "docstatus": 0,
-        "from_date": ["<=", to_date],
-        "to_date": [">=", from_date]
-    })
-
-    if existing_leave:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="Employee already has a leave application for these dates",
-            status_code=409,
-            http_status=409
-    )
-
-    if from_date > to_date:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="Leave From Date cannot be later than Leave To Date",
-            status_code=400,
-            http_status=400
-        )
-
-    if isHalfDay and from_date != to_date:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="Half-day leave must be for a single day",
-            status_code=400,
-            http_status=400
-        )
-
-    days_requested = 0.5 if isHalfDay else calculate_working_days(from_date, to_date)
-    print("Days requested:", days_requested)
-    
-    if has_leave_overlap(employee_name, leaveType, from_date, to_date):
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="Employee already has an overlapping leave application",
-            status_code=400,
-            http_status=400
-        )
-
-
-    
-    
-    allocation = frappe.get_all("Leave Allocation", filters={
-        "employee": employee_name,
-        "leave_type": leaveType,
-        "docstatus": 1
-    }, fields=["name", "total_leaves_allocated"], limit=1)
-
-    if not allocation:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message="No active leave allocation found",
-            status_code=400,
-            http_status=400
-        )
-
-    alloc = allocation[0]
-    balance = alloc.total_leaves_allocated
-
-    if balance < days_requested:
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message=f"Insufficient leave balance for Leave Type {leaveType}",
-            status_code=400,
-            http_status=400
-        )
-
-
-    try:    
-        leave_doc = frappe.get_doc({
-            "doctype": "Leave Application",
-            "employee": employee_name,
-            "leave_type": leaveType,
-            "from_date": from_date,
-            "to_date": to_date,
-            "half_day": 1 if isHalfDay else 0,
-            "description": leaveReason,
-            "status": leaveStatus,
-            "leave_approver": approverId,
-            "total_leave_days": days_requested
-        })
-
-        leave_doc.insert(ignore_permissions=True)
-        frappe.flags.ignore_validate = True
-        frappe.db.commit()
-
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="success",
-            message="Leave application submitted successfully",
-            status_code=201,
-            http_status=201
-        )
-
-    except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Leave Application Insert Error")
-        return NAPSA_CLIENT_INSTANCE.send_response(
-            status="fail",
-            message=str(e),
-            status_code=500,
-            http_status=500
-        )
-
-
-
 @frappe.whitelist(allow_guest=False)
 def get_all_leaves():
     args = frappe.request.args
+    company = NAPSA_CLIENT_INSTANCE.GetCurrentCompanyName()
 
     try:
         page = int(args.get("page", 0))
@@ -275,11 +99,21 @@ def get_all_leaves():
             http_status=400
         )
 
+    # Build filters
+    filters = {"company": company}
+    if args.get("employee"):
+        filters["employee"] = args.get("employee")
+    if args.get("department"):
+        filters["department"] = args.get("department")
+    if args.get("leave_type"):
+        filters["leave_type"] = args.get("leave_type")
+
     start = (page - 1) * page_size
-    total = frappe.db.count("Leave Application")
+    total = frappe.db.count("Leave Application", filters=filters)
 
     leaves = frappe.get_all(
         "Leave Application",
+        filters=filters,
         fields=[
             "name",
             "employee",
@@ -299,7 +133,6 @@ def get_all_leaves():
     )
 
     data = []
-    
     for leave in leaves:
         department_name = frappe.db.get_value(
             "Department",
@@ -345,8 +178,6 @@ def get_all_leaves():
         status_code=200,
         http_status=200
     )
-
-
 
 @frappe.whitelist()
 def get_leave_balances():
@@ -569,9 +400,12 @@ def update_leave_status():
         )
 
 
+
 @frappe.whitelist(allow_guest=False, methods=["GET"])
 def get_all_pending_leaves():
     args = frappe.request.args
+    company = NAPSA_CLIENT_INSTANCE.GetCurrentCompanyName()
+
     try:
         page = int(args.get("page", 0))
         page_size = int(args.get("page_size", 0))
@@ -600,14 +434,18 @@ def get_all_pending_leaves():
         )
 
     start = (page - 1) * page_size
+
+    # Count total pending leaves for the company
     total = frappe.db.count(
         "Leave Application",
         filters={
             "status": "Open",
-            "docstatus": 0
+            "docstatus": 0,
+            "company": company
         }
     )
 
+    # Fetch pending leaves with SQL, filtered by company
     pending_leaves = frappe.db.sql("""
         SELECT
             la.name AS leave_id,
@@ -623,10 +461,11 @@ def get_all_pending_leaves():
         LEFT JOIN `tabEmployee` emp ON emp.name = la.employee
         LEFT JOIN `tabLeave Type` lt ON lt.name = la.leave_type
         WHERE la.status = 'Open'
-        AND la.docstatus = 0
+          AND la.docstatus = 0
+          AND la.company = %s
         ORDER BY la.creation DESC
         LIMIT %s OFFSET %s
-    """, (page_size, start), as_dict=True)
+    """, (company, page_size, start), as_dict=True)
 
     leaves = []
     for row in pending_leaves:
@@ -667,7 +506,6 @@ def get_all_pending_leaves():
         status_code=200,
         http_status=200
     )
-
 
 @frappe.whitelist(allow_guest=False, methods=["PATCH"])
 def cancel_leave():

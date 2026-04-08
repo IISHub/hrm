@@ -14,6 +14,7 @@ import datetime
 
 NAPSA_CLIENT_INSTANCE = NapsaClient()
 
+
 def generate_employee_id():
     last_id = frappe.db.sql("""
         SELECT custom_id
@@ -470,9 +471,12 @@ def create_employee():
 
     employee_id = generate_employee_id()
     date = NAPSA_CLIENT_INSTANCE.GetStaticDate()
+    costCenter = NAPSA_CLIENT_INSTANCE.GetDefaultCostCenter()
+    company = NAPSA_CLIENT_INSTANCE.GetCurrentCompanyName()
     try: 
         employee = frappe.get_doc({
             "doctype": "Employee",
+            # "company": company,
             "custom_id": employee_id,
             "first_name": FirstName,
             "last_name": LastName,
@@ -487,7 +491,7 @@ def create_employee():
             "person_to_be_contacted": emergencyContactName,
             "emergency_phone_number": emergencyContactPhone,
             "relation": emergencyContactRelationship,
-            "designation": JobTitle,
+            "designation": JobTitle, 
             "employment_type": EmployeeType,
             "custom_alternate_phone": AlternatePhone,
             "marital_status": MaritalStatus,
@@ -545,11 +549,11 @@ def create_employee():
             "custom_payment_mobile_full_name": PaymentMobileFullname,
             "custom_payment_mobile_phone": PaymentMobilePhone,
             "custom_payment_mobile_mno":  PaymentMobileMno,
+            # "payroll_cost_center": costCenter,
             "status": status,
         })
 
         employee.insert(ignore_permissions=True)
-        
         salaryStructureAssignment = frappe.get_doc({
             "doctype": "Salary Structure Assignment",
             "employee": employee.name,
@@ -642,7 +646,7 @@ def get_all_employees(page=None, page_size=None):
         filters["department"] = args.get("department")
 
     if args.get("jobTitle"):
-        filters["custom_jobtitle"] = args.get("jobTitle")
+        filters["designation"] = args.get("jobTitle")
 
     if args.get("workLocation"):
         filters["custom_work_location"] = args.get("workLocation")
@@ -680,7 +684,7 @@ def get_all_employees(page=None, page_size=None):
             "first_name",
             "middle_name",
             "last_name",
-            "custom_jobtitle",
+            "designation",
             "department",
             "custom_work_location",
             "status",
@@ -723,7 +727,7 @@ def get_all_employees(page=None, page_size=None):
             "id": emp.custom_id,
             "employeeId": emp.name,
             "name": full_name,
-            "jobTitle": emp.custom_jobtitle,
+            "jobTitle": emp.designation,
             "department": department_label,
             "workLocation": emp.custom_work_location,
             "grossSalary": salary,  

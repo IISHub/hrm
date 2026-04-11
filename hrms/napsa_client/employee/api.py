@@ -1,4 +1,6 @@
 
+import json
+
 from hrms.napsa_client.employee.employeeContract import createEmploymentContract
 from hrms.napsa_client.save_files.save import save_file
 from hrms.napsa_client.main import NapsaClient
@@ -14,7 +16,37 @@ import datetime
 
 NAPSA_CLIENT_INSTANCE = NapsaClient()
 
+def format_address_json(street=None, city=None, province=None, postal_code=None, country=None):
+    return json.dumps({
+        "street": street,
+        "city": city,
+        "province": province,
+        "postalCode": postal_code,
+        "country": country
+    })
 
+
+def parse_address_json(address):
+    if not address:
+        return {
+            "street": None,
+            "city": None,
+            "province": None,
+            "postalCode": None,
+            "country": None
+        }
+
+    try:
+        return json.loads(address)
+    except Exception:
+        return {
+            "street": None,
+            "city": None,
+            "province": None,
+            "postalCode": None,
+            "country": None
+        }
+        
 def generate_employee_id():
     last_id = frappe.db.sql("""
         SELECT custom_id
@@ -38,7 +70,7 @@ FIELD_MAP = {
     "AlternatePhone": "custom_alternate_phone",
     "TpinId": "custom_tax_payer_indentification_number",
     "NrcId": "custom_national_registration_number",
-    "NhimaHealthInsurance": "custom_nhima_health_insurance_number",
+    "NhimaHealthInsurance": "health_insurance_no",
     "SocialSecurityNapsa": "custom_social_security_number",
     "AccountNumber": "bank_ac_no",
 }
@@ -101,8 +133,6 @@ def create_employee():
     NhimaHealthInsurance = data.get("NhimaHealthInsurance")
     NrcId = data.get("NrcId")
     TpinId = data.get("TpinId")
-    CeilingYear = data.get("CeilingYear")
-    CeilingAmount = data.get("CeilingAmount")
     verifiedFromSource = data.get("verifiedFromSource")
     addressStreet = data.get("addressStreet")
     addressCity = data.get("addressCity")
@@ -233,7 +263,7 @@ def create_employee():
             http_status=400
         )
         
-    existing_employee = frappe.db.get_value("Employee", {"custom_nhima_health_insurance_number": NhimaHealthInsurance}, "name")
+    existing_employee = frappe.db.get_value("Employee", {"health_insurance_no": NhimaHealthInsurance}, "name")
     if existing_employee:
         return NAPSA_CLIENT_INSTANCE.send_response(
             status="fail",
@@ -496,12 +526,17 @@ def create_employee():
             "custom_alternate_phone": AlternatePhone,
             "marital_status": MaritalStatus,
             "department": department_id,
+            "health_insurance_no": NhimaHealthInsurance,
+            "current_address": format_address_json(
+                addressStreet,
+                addressCity,
+                addressProvince,
+                addressPostalCode,
+                addressCountry
+            ),
             "custom_tax_payer_indentification_number": TpinId,
             "custom_national_registration_number": NrcId,
-            "custom_nhima_health_insurance_number": NhimaHealthInsurance,
             "custom_social_security_number": SocialSecurityNapsa,
-            "custom_ceiling_year": CeilingYear,
-            "custom_ceiling_amount": CeilingAmount,
             "custom_payment_method": PaymentMethod,
             "custom_bank_account_type": AccountType,
             "bank_name": BankName,
@@ -510,14 +545,6 @@ def create_employee():
             "custom_bank_branch_name": BranchName,
             "custom_bank_branch_code": BranchCode,
             "custom_verifiedfromsource": verifiedFromSource,
-            "custom_address_street": addressStreet,
-            "custom_address_city": addressCity,
-            "custom_address_province": addressProvince,
-            "custom_address_postal_code": addressPostalCode,
-            "custom_address_country": addressCountry,
-            "custom_emergency_contact_name": emergencyContactName,
-            "custom_emergency_contact_phone": emergencyContactPhone,
-            "custom_emergency_contact_relationship": emergencyContactRelationship,
             "default_shift": shift_id,
             "custom_probation_period": probationPeriod,
             "custom_work_location": workLocation,
@@ -531,13 +558,6 @@ def create_employee():
             "custom_weekly_schedule_saturday": weeklyScheduleSaturday,
             "custom_weekly_schedule_sunday": weeklyScheduleSunday,
             "salary_currency": currency,
-            "custom_payment_frequency": PaymentFrequency,
-            "custom_basic_salary": BasicSalary,
-            "custom_housing_allowance": HousingAllowance,
-            "custom_transport_allowance": TransportAllowance,
-            "custom_otherallowances": otherAllowances,
-            "custom_meal_allowance": MealAllowance,
-            "custom_nationality": Nationality,
             "custom_nrc": NRC_DOCUMENT_URL,
             "custom_cv": CV_DOCUMENT_URL,
             "custom_educationcertificates": CV_EDUCERT_URL,
@@ -860,7 +880,7 @@ def get_employee():
         "identityInfo": {
             "NrcId": employee.custom_national_registration_number,
             "SocialSecurityNapsa": employee.custom_social_security_number,
-            "NhimaHealthInsurance": employee.custom_nhima_health_insurance_number,
+            "NhimaHealthInsurance": employee.health_insurance_no,
             "TpinId": employee.custom_tax_payer_indentification_number,
             "verifiedFromSource": employee.custom_verifiedfromsource
         },
@@ -879,13 +899,7 @@ def get_employee():
             "workEmail": getattr(employee, "company_email", None),
             "phoneNumber": employee.cell_number,
             "alternatePhone": employee.custom_alternate_phone,
-            "address": {
-                "street": employee.custom_address_street,
-                "city": employee.custom_address_city,
-                "province": employee.custom_address_province,
-                "postalCode": employee.custom_address_postal_code,
-                "country": employee.custom_address_country
-            },
+            "address": parse_address_json(employee.current_address),
             "emergencyContact": {
                 "name": employee.person_to_be_contacted,
                 "phone": employee.emergency_phone_number,
@@ -1074,7 +1088,7 @@ def update_employee():
     check_unique("custom_alternate_phone", AlternatePhone, "Alternate Phone")
     check_unique("custom_tax_payer_indentification_number", TpinId, "TPIN")
     check_unique("custom_national_registration_number", NrcId, "NRC")
-    check_unique("custom_nhima_health_insurance_number", NhimaHealthInsurance, "NHIMA")
+    check_unique("health_insurance_no", NhimaHealthInsurance, "NHIMA")
     check_unique("custom_social_security_number", SocialSecurityNapsa, "NAPSA")
     
     ALLOWED_MARITAL_STATUS = {
@@ -1145,7 +1159,7 @@ def update_employee():
         "employment_type": EmployeeType,
         "custom_tax_payer_indentification_number": TpinId,
         "custom_national_registration_number": NrcId,
-        "custom_nhima_health_insurance_number": NhimaHealthInsurance,
+        "health_insurance_no": NhimaHealthInsurance,
         "custom_social_security_number": SocialSecurityNapsa,
         "custom_ceiling_year": CeilingYear,
         "custom_ceiling_amount": CeilingAmount,
@@ -1157,15 +1171,17 @@ def update_employee():
         "custom_bank_branch_code": BranchCode,
         "custom_bank_branch_name": BranchName,
         "custom_verifiedfromsource": verifiedFromSource,
-        "custom_address_street": addressStreet,
-        "custom_address_city": addressCity,
-        "custom_address_province": addressProvince,
-        "custom_address_postal_code": addressPostalCode,
-        "custom_address_country": addressCountry,
+        "current_address": format_address_json(
+            addressStreet,
+            addressCity,
+            addressProvince,
+            addressPostalCode,
+            addressCountry
+        ),
         "person_to_be_contacted": emergencyContactName,
         "emergency_phone_number": emergencyContactPhone,
         "relation": emergencyContactRelationship,
-        "reports_to": reportingManager,
+
         # "default_shift": shift_id,
         "custom_probation_period": probationPeriod,
         "custom_work_location": workLocation,
@@ -1180,12 +1196,6 @@ def update_employee():
         "custom_weekly_schedule_sunday": weeklyScheduleSunday,
         "salary_currency": currency,
         "custom_payment_frequency": PaymentFrequency,
-        "custom_basic_salary": BasicSalary,
-        "custom_housing_allowance": HousingAllowance,
-        "custom_transport_allowance": TransportAllowance,
-        "custom_otherallowances": otherAllowances,
-        "custom_meal_allowance": MealAllowance,
-        "custom_gross_salary": BasicAmount,
         "custom_nationality": Nationality,
         "custom_dob": Dob,
         "status": status,
@@ -1645,7 +1655,7 @@ def validate_employee():
 
 
     if nhima:
-        if frappe.db.exists("Employee", {"custom_nhima_health_insurance_number": nhima}):
+        if frappe.db.exists("Employee", {"health_insurance_no": nhima}):
             errors["nhima"] = "NHIMA number already exists"
 
     if napsa:
